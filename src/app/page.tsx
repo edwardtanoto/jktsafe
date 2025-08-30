@@ -1,103 +1,135 @@
-import Image from "next/image";
+'use client';
+
+import { useState } from 'react';
+import RiotMap from '@/components/RiotMap';
+import { env } from '../../env.config';
 
 export default function Home() {
-  return (
-    <div className="font-sans grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20">
-      <main className="flex flex-col gap-[32px] row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="font-mono list-inside list-decimal text-sm/6 text-center sm:text-left">
-          <li className="mb-2 tracking-[-.01em]">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] font-mono font-semibold px-1 py-0.5 rounded">
-              src/app/page.tsx
-            </code>
-            .
-          </li>
-          <li className="tracking-[-.01em]">
-            Save and see your changes instantly.
-          </li>
-        </ol>
+  const [scraping, setScraping] = useState(false);
+  const [lastScrapeResult, setLastScrapeResult] = useState<any>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:w-auto"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent font-medium text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 w-full sm:w-auto md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+  const handleScrapeTikTok = async () => {
+    setScraping(true);
+    try {
+      const response = await fetch('/api/scrape/tiktok');
+      const result = await response.json();
+      setLastScrapeResult(result);
+
+      if (result.success) {
+        // Refresh the map after successful scraping
+        setRefreshKey(prev => prev + 1);
+      }
+    } catch (error) {
+      console.error('Error scraping TikTok:', error);
+      setLastScrapeResult({ success: false, error: 'Failed to scrape TikTok' });
+    } finally {
+      setScraping(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white shadow-sm border-b">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+          <div className="flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-gray-900">
+              Protest Location Tracker
+            </h1>
+            <button
+              onClick={handleScrapeTikTok}
+              disabled={scraping}
+              className="bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              {scraping ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  Scraping...
+                </>
+              ) : (
+                <>
+                  <span>🔍</span>
+                  Scrape TikTok
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* Main Content */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Status Card */}
+        {lastScrapeResult && (
+          <div className={`mb-6 p-4 rounded-lg ${lastScrapeResult.success ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+            <h3 className={`font-semibold ${lastScrapeResult.success ? 'text-green-800' : 'text-red-800'}`}>
+              {lastScrapeResult.success ? '✅ Scrape Successful' : '❌ Scrape Failed'}
+            </h3>
+            {lastScrapeResult.message && (
+              <p className={`text-sm mt-1 ${lastScrapeResult.success ? 'text-green-700' : 'text-red-700'}`}>
+                {lastScrapeResult.message}
+              </p>
+            )}
+            {lastScrapeResult.error && (
+              <p className="text-sm text-red-700 mt-1">
+                {lastScrapeResult.error}
+              </p>
+            )}
+            {lastScrapeResult.success && (
+              <div className="mt-2 text-sm text-green-700">
+                <p>📹 Videos found: {lastScrapeResult.videos}</p>
+                <p>🎯 Relevant videos: {lastScrapeResult.relevant}</p>
+                <p>✅ Processed: {lastScrapeResult.processed}</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Map */}
+        <div className="bg-white rounded-lg shadow-sm border p-6">
+          <h2 className="text-xl font-semibold mb-4">Protest Locations Map</h2>
+          <RiotMap
+            key={refreshKey}
+            accessToken={env.mapbox.accessToken || process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN || ''}
+          />
+        </div>
+
+        {/* Info Section */}
+        <div className="mt-8 bg-white rounded-lg shadow-sm border p-6">
+          <h2 className="text-xl font-semibold mb-4">How it works</h2>
+          <div className="grid md:grid-cols-2 gap-6">
+            <div>
+              <h3 className="font-semibold text-lg mb-2">📍 Location Extraction</h3>
+              <p className="text-gray-600 text-sm">
+                We analyze TikTok video captions and titles to identify specific locations mentioned in Indonesian protest content.
+                Using AI, we extract places like "Polda Bali", "Gedung DPR Jakarta", or "Monas" from the text.
+              </p>
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg mb-2">🗺️ Geocoding</h3>
+              <p className="text-gray-600 text-sm">
+                Once we identify a location, we use Mapbox geocoding to convert the location name into precise latitude and longitude coordinates
+                that can be displayed as markers on the map.
+              </p>
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg mb-2">🔍 TikTok Scraping</h3>
+              <p className="text-gray-600 text-sm">
+                The system searches for protest-related keywords in Indonesian on TikTok, focusing on today's content to track current events
+                and demonstrations across Indonesia.
+              </p>
+            </div>
+            <div>
+              <h3 className="font-semibold text-lg mb-2">📊 Real-time Updates</h3>
+              <p className="text-gray-600 text-sm">
+                Click "Scrape TikTok" to fetch the latest protest videos and update the map with new location markers.
+                Each marker shows details about the protest event and links back to the original video.
+              </p>
+            </div>
+          </div>
         </div>
       </main>
-      <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
     </div>
   );
 }
