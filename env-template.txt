@@ -1,0 +1,16 @@
+# Copy this file to .env.local and fill in your actual values
+
+# Mapbox Configuration - REQUIRED
+NEXT_PUBLIC_MAPBOX_TOKEN=pk.eyJ1IjoiZWR3YXJkdGFub3RvMTIiLCJhIjoiY2xtMGRsZTVoMDljODNkbndzYm8wenJndSJ9.1Dn3lhzVkrwZdRKwmwmAMQ
+
+# Database
+DATABASE_URL="file:./dev.db"
+
+# OpenRouter (required for location extraction)
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+
+# RapidAPI (required for TikTok scraping)
+RAPIDAPI_KEY=your_rapidapi_key_here
+
+# SERP API (required for Google Maps geocoding)
+SERPAPI_KEY=your_serpapi_key_here

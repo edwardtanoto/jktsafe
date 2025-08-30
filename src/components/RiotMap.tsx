@@ -1,0 +1,796 @@
+'use client';
+
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
+import { useEffect, useRef, useState } from "react";
+
+interface Event {
+  id: number;
+  title: string;
+  description: string;
+  lat: number;
+  lng: number;
+  source: string;
+  url?: string;
+  verified: boolean;
+  type: string;
+  createdAt: string;
+}
+
+export default function RiotMap() {
+  const mapContainer = useRef<any>(null);
+  const map = useRef<mapboxgl.Map | any>(null);
+  const [scrapingStatus, setScrapingStatus] = useState<'idle' | 'scraping' | 'completed' | 'error'>('idle');
+  const [lastUpdate, setLastUpdate] = useState<string>('Never');
+  const [isScraping, setIsScraping] = useState(false);
+  const [events, setEvents] = useState<Event[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Function to fetch events from database
+  const fetchEvents = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch('/api/events?limit=100'); // Remove type filter to get all events
+      if (!response.ok) {
+        throw new Error('Failed to fetch events');
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        setEvents(data.events);
+        console.log(`📍 Loaded ${data.events.length} events from database`);
+      } else {
+        throw new Error(data.error || 'Failed to fetch events');
+      }
+    } catch (error) {
+      console.error('❌ Error fetching events:', error);
+      setError(error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Function to scrape TikTok for latest news
+  const handleScrapeTikTok = async () => {
+    if (isScraping) return; // Prevent multiple concurrent scrapes
+
+    setIsScraping(true);
+    setScrapingStatus('scraping');
+
+    try {
+      console.log('🚀 Starting TikTok scraping...');
+      const response = await fetch('/api/scrape/tiktok', {
+        method: 'GET'
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Scraping completed:', result);
+
+        setScrapingStatus('completed');
+        setLastUpdate(new Date().toLocaleTimeString('en-US', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        }));
+
+        // Refresh events after scraping
+        await fetchEvents();
+
+      } else {
+        console.error('❌ Scraping failed');
+        setScrapingStatus('error');
+      }
+    } catch (error) {
+      console.error('❌ Scraping error:', error);
+      setScrapingStatus('error');
+    } finally {
+      setIsScraping(false);
+    }
+  };
+
+  // Function to check scraping status periodically
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const response = await fetch('/api/scrape/status');
+        if (response.ok) {
+          const data: any = await response.json();
+          setScrapingStatus(data.status || 'idle');
+          setLastUpdate(data.lastUpdate || 'Never');
+        }
+      } catch (error) {
+        // API might not exist yet, keep default status
+        console.log('Status API not available yet');
+      }
+    };
+
+    checkStatus();
+    const interval = setInterval(checkStatus, 30000); // Check every 30 seconds
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Function to create GeoJSON from events
+  const createEventGeoJSON = (events: Event[]) => {
+    return {
+      type: 'FeatureCollection',
+      features: events.map(event => ({
+        type: 'Feature',
+        geometry: {
+          type: 'Point',
+          coordinates: [event.lng, event.lat] // [lng, lat]
+        },
+        properties: {
+          id: event.id,
+          title: event.title,
+          description: event.description,
+          source: event.source,
+          url: event.url,
+          verified: event.verified,
+          type: event.type,
+          createdAt: event.createdAt,
+          emoji: event.type === 'riot' ? '🔥' : event.type === 'protest' ? '👥' : '📍'
+        }
+      }))
+    };
+  };
+
+  // Function to update map markers
+  const updateMapMarkers = () => {
+    if (!map.current) {
+      console.log('🗺️ Map instance not created yet');
+      return;
+    }
+
+    if (!map.current.loaded) {
+      console.log('🗺️ Map not loaded yet, will retry...');
+      // Retry after a short delay
+      setTimeout(updateMapMarkers, 500);
+      return;
+    }
+
+    console.log(`📍 Updating map with ${events.length} events`);
+    const eventData = createEventGeoJSON(events);
+    console.log('📋 Generated GeoJSON:', eventData.features.length, 'features');
+
+    // Log each event for debugging
+    events.forEach((event, index) => {
+      console.log(`📍 Event ${index + 1}: ${event.title.substring(0, 30)}... at [${event.lng}, ${event.lat}]`);
+    });
+
+    // Update or create the events source
+    if (map.current.getSource('events')) {
+      console.log('🔄 Updating existing events source');
+      (map.current.getSource('events') as any).setData(eventData);
+    } else {
+      console.log('➕ Creating new events source and layers');
+      // Add source with clustering enabled
+      map.current.addSource('events', {
+        type: 'geojson',
+        data: eventData,
+        cluster: true,
+        clusterMaxZoom: 14,
+        clusterRadius: 50
+      });
+
+      // Add cluster circles (for groups of events)
+      map.current.addLayer({
+        id: 'clusters',
+        type: 'circle',
+        source: 'events',
+        filter: ['has', 'point_count'],
+        paint: {
+          'circle-color': [
+            'step',
+            ['get', 'point_count'],
+            '#51bbd6', // Light blue for small clusters
+            5, '#f1f075', // Yellow for medium clusters
+            15, '#f28cb1' // Pink for large clusters
+          ],
+          'circle-radius': [
+            'step',
+            ['get', 'point_count'],
+            20, // Small clusters
+            5, 30, // Medium clusters
+            15, 40 // Large clusters
+          ],
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 2
+        }
+      });
+
+      // Add cluster count labels
+      map.current.addLayer({
+        id: 'cluster-count',
+        type: 'symbol',
+        source: 'events',
+        filter: ['has', 'point_count'],
+        layout: {
+          'text-field': '{point_count_abbreviated}',
+          'text-font': ['DIN Offc Pro Medium', 'Arial Unicode MS Bold'],
+          'text-size': 12,
+          'text-anchor': 'center'
+        },
+        paint: {
+          'text-color': '#000000'
+        }
+      });
+
+      // Add circle layer for individual riot events
+      map.current.addLayer({
+        id: 'riot-circles',
+        type: 'circle',
+        source: 'events',
+        filter: ['all', ['==', ['get', 'type'], 'riot'], ['!', ['has', 'point_count']]],
+        paint: {
+          'circle-radius': 18,
+          'circle-color': '#ff4444',
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 2,
+          'circle-opacity': 0.8
+        }
+      });
+
+      // Add circle layer for individual protest events
+      map.current.addLayer({
+        id: 'protest-circles',
+        type: 'circle',
+        source: 'events',
+        filter: ['all', ['==', ['get', 'type'], 'protest'], ['!', ['has', 'point_count']]],
+        paint: {
+          'circle-radius': 18,
+          'circle-color': '#ffaa00',
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 2,
+          'circle-opacity': 0.8
+        }
+      });
+
+      // Add circle layer for individual other events
+      map.current.addLayer({
+        id: 'other-circles',
+        type: 'circle',
+        source: 'events',
+        filter: ['all',
+          ['!in', ['get', 'type'], 'riot', 'protest'],
+          ['!', ['has', 'point_count']]
+        ],
+        paint: {
+          'circle-radius': 18,
+          'circle-color': '#4444ff',
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 2,
+          'circle-opacity': 0.8
+        }
+      });
+
+      // Add text layer for individual event emojis
+      map.current.addLayer({
+        id: 'event-emoji',
+        type: 'symbol',
+        source: 'events',
+        filter: ['!', ['has', 'point_count']],
+        layout: {
+          'text-field': ['get', 'emoji'],
+          'text-size': 20,
+          'text-anchor': 'center',
+          'text-justify': 'center',
+          'text-allow-overlap': true
+        },
+        paint: {
+          'text-color': '#ffffff',
+          'text-halo-color': '#000000',
+          'text-halo-width': 2
+        }
+      });
+
+      // Add click event for clusters
+      map.current.on('click', 'clusters', (e: any) => {
+        const features = map.current.queryRenderedFeatures(e.point, {
+          layers: ['clusters']
+        });
+
+        if (features.length > 0) {
+          const clusterId = features[0].properties.cluster_id;
+          const pointCount = features[0].properties.point_count;
+          const clusterSource = (map.current.getSource('events') as any);
+
+          // Get cluster expansion zoom
+          clusterSource.getClusterExpansionZoom(clusterId, (err: any, zoom: number) => {
+            if (err) return;
+
+            map.current.easeTo({
+              center: features[0].geometry.coordinates,
+              zoom: zoom
+            });
+          });
+        }
+      });
+
+      // Add click events for individual events
+      const individualLayers = ['riot-circles', 'protest-circles', 'other-circles', 'event-emoji'];
+      individualLayers.forEach(layerId => {
+        map.current.on('click', layerId, (e: any) => {
+          const feature = e.features[0];
+          const coordinates = feature.geometry.coordinates.slice();
+          const properties = feature.properties;
+
+          // Create detailed popup for individual events
+          const popup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true })
+            .setLngLat(coordinates)
+            .setHTML(`
+              <div style="max-width: 320px; font-family: -apple-system, BlinkMacSystemFont, sans-serif;">
+                <h3 style="margin: 0 0 8px 0; color: #1f2937; font-size: 16px; font-weight: 600;">
+                  ${properties.emoji} ${properties.title}
+                </h3>
+                <p style="margin: 0 0 12px 0; color: #6b7280; font-size: 14px; line-height: 1.4;">
+                  ${properties.description || 'No description available'}
+                </p>
+                <div style="display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #4b5563;">
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <span>📍</span>
+                    <span>Type: <strong>${properties.type}</strong></span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <span>🔗</span>
+                    <span>Source: <strong>${properties.source}</strong></span>
+                  </div>
+                  <div style="display: flex; align-items: center; gap: 6px;">
+                    <span>⏰</span>
+                    <span>${new Date(properties.createdAt).toLocaleString()}</span>
+                  </div>
+                  ${properties.verified ? '<div style="display: flex; align-items: center; gap: 6px;"><span>✅</span><span style="color: #059669; font-weight: 500;">Verified Event</span></div>' : ''}
+                  ${properties.url ? `<div style="margin-top: 8px;"><a href="${properties.url}" target="_blank" style="color: #3b82f6; text-decoration: none; font-weight: 500;">🔗 View Original Source →</a></div>` : ''}
+                </div>
+              </div>
+            `)
+            .addTo(map.current);
+
+          // Fly to location
+          map.current.flyTo({
+            center: coordinates,
+            zoom: 15,
+            speed: 1.2,
+            curve: 1,
+            easing: (t: number) => t,
+            essential: true
+          });
+        });
+
+        // Add cursor pointer for interactive pins
+        map.current.on('mouseenter', layerId, () => {
+          map.current.getCanvas().style.cursor = 'pointer';
+        });
+        map.current.on('mouseleave', layerId, () => {
+          map.current.getCanvas().style.cursor = '';
+        });
+      });
+
+      // Add cursor pointer for clusters
+      map.current.on('mouseenter', 'clusters', () => {
+        map.current.getCanvas().style.cursor = 'pointer';
+      });
+      map.current.on('mouseleave', 'clusters', () => {
+        map.current.getCanvas().style.cursor = '';
+      });
+    }
+  };
+
+  // Initialize map
+  useEffect(() => {
+    const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+
+    if (!token) {
+      console.error('❌ NEXT_PUBLIC_MAPBOX_TOKEN is not set. Please add it to your .env.local file.');
+      setError('Mapbox token not configured');
+      return;
+    }
+
+    console.log('🗝️ Mapbox token configured');
+    mapboxgl.accessToken = token;
+
+    try {
+      map.current = new mapboxgl.Map({
+        container: mapContainer.current,
+        style: "mapbox://styles/mapbox/dark-v11",
+        center: [106.8456, -6.2088], // Center on Jakarta
+        zoom: 11,
+        attributionControl: false
+      });
+
+      console.log('🗺️ Map instance created successfully');
+    } catch (error) {
+      console.error('❌ Failed to create map:', error);
+      setError('Failed to initialize map');
+      return;
+    }
+
+    map.current.on('error', (e: any) => {
+      console.error('❌ Map error:', e);
+      setError('Map loading error');
+    });
+
+    map.current.on('load', () => {
+      console.log('🗺️ Map loaded successfully!');
+      console.log('📍 Map center:', map.current.getCenter());
+      console.log('🔍 Map zoom:', map.current.getZoom());
+
+      // Add a test marker to verify map is working
+      const testMarker = new mapboxgl.Marker({ color: '#00ff00' })
+        .setLngLat([106.8456, -6.2088])
+        .setPopup(new mapboxgl.Popup().setHTML('<h3>🧪 Test Marker</h3><p>Map is working!</p>'))
+        .addTo(map.current);
+
+      console.log('✅ Test marker added');
+
+      // Small delay to ensure map is fully initialized
+      setTimeout(() => {
+        console.log(`🔄 Checking for ${events.length} events to display`);
+        if (events.length > 0) {
+          console.log('🚀 Initializing markers for existing events');
+          updateMapMarkers();
+        } else {
+          console.log('⚠️ No events to display yet');
+        }
+      }, 1000);
+    });
+
+    return () => {
+      if (map.current) {
+        map.current.remove();
+      }
+    };
+  }, []);
+
+  // Fetch events on mount and set up periodic refresh
+  useEffect(() => {
+    console.log('🚀 Component mounted, fetching events...');
+    fetchEvents();
+
+    // Set up periodic refresh every 5 minutes
+    const refreshInterval = setInterval(() => {
+      if (!loading && !isScraping) {
+        console.log('🔄 Periodic refresh of events...');
+        fetchEvents();
+      }
+    }, 5 * 60 * 1000); // 5 minutes
+
+    return () => clearInterval(refreshInterval);
+  }, []);
+
+  // Update map markers when events change
+  useEffect(() => {
+    console.log(`🔄 Events updated: ${events.length} events received`);
+    if (events.length > 0) {
+      console.log('📍 Sample event:', {
+        id: events[0].id,
+        title: events[0].title.substring(0, 50) + '...',
+        lat: events[0].lat,
+        lng: events[0].lng,
+        type: events[0].type
+      });
+    }
+    updateMapMarkers();
+  }, [events]);
+
+  const getStatusColor = () => {
+    switch (scrapingStatus) {
+      case 'scraping': return '#3b82f6'; // Blue
+      case 'completed': return '#10b981'; // Green
+      case 'error': return '#ef4444'; // Red
+      default: return '#6b7280'; // Gray
+    }
+  };
+
+  const getStatusText = () => {
+    switch (scrapingStatus) {
+      case 'scraping': return 'Scraping...';
+      case 'completed': return 'Updated';
+      case 'error': return 'Error';
+      default: return 'Idle';
+    }
+  };
+
+  return (
+    <div id="map" style={{ width: '100%', height: '100vh', position: 'relative' }}>
+      <div ref={mapContainer} style={{ height: '100vh', width: '100%' }} />
+
+      {/* UI Overlay */}
+      <div style={{
+        position: 'absolute',
+        top: '20px',
+        left: '20px',
+        zIndex: 1000,
+        fontFamily: '"IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        pointerEvents: 'none'
+      }}>
+        {/* Unified Box */}
+        <div style={{
+          backgroundColor: 'rgba(0, 0, 0, 0.85)',
+          backdropFilter: 'blur(10px)',
+          padding: '20px',
+          textAlign: 'left',
+          borderRadius: '12px',
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          minWidth: '200px'
+        }}>
+          {/* Main Title */}
+          <h1 style={{
+            margin: '0 0 16px 0',
+            fontSize: '24px',
+            fontWeight: '600',
+            color: '#ffffff',
+            textShadow: '0 2px 4px rgba(0, 0, 0, 0.5)',
+            textAlign: 'left'
+          }}>
+            Safe Indonesia
+          </h1>
+
+          {/* Events Count */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingTop: '8px',
+            borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+            marginBottom: '8px'
+          }}>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{
+                fontSize: '13px',
+                fontWeight: '500',
+                color: '#ffffff',
+                marginBottom: '2px'
+              }}>
+                📍 Events: {loading ? '...' : events.length}
+              </div>
+              <div style={{
+                fontSize: '11px',
+                color: '#9ca3af'
+              }}>
+                {loading ? 'Loading events...' : error ? `❌ ${error}` : 'Live from database'}
+              </div>
+            </div>
+          </div>
+
+          {/* Debug Info */}
+          {events.length > 0 && (
+            <div style={{
+              paddingTop: '4px',
+              borderTop: '1px solid rgba(255, 255, 255, 0.05)',
+              marginBottom: '8px',
+              fontSize: '11px',
+              color: '#9ca3af'
+            }}>
+              <div>🔧 Debug: {events.length} events loaded</div>
+              <div>📍 First event: {events[0]?.title?.substring(0, 25)}...</div>
+              <div>📌 Coords: [{events[0]?.lng?.toFixed(4)}, {events[0]?.lat?.toFixed(4)}]</div>
+            </div>
+          )}
+
+          {/* Legend */}
+          <div style={{
+            paddingTop: '8px',
+            borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+            marginBottom: '8px'
+          }}>
+            <div style={{
+              fontSize: '12px',
+              fontWeight: '500',
+              color: '#ffffff',
+              marginBottom: '6px'
+            }}>
+              Legend
+            </div>
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '4px',
+              fontSize: '11px',
+              color: '#9ca3af'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#ff4444' }}></div>
+                <span>Riot 🔥</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#ffaa00' }}></div>
+                <span>Protest 👥</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <div style={{ width: '12px', height: '12px', borderRadius: '50%', backgroundColor: '#4444ff' }}></div>
+                <span>Other 📍</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Status Indicator */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'left',
+            justifyContent: 'left',
+            gap: '10px'
+          }}>
+            <div style={{
+              width: '10px',
+              height: '10px',
+              borderRadius: '50%',
+              backgroundColor: getStatusColor(),
+              boxShadow: `0 0 10px ${getStatusColor()}`,
+              animation: scrapingStatus === 'scraping' ? 'pulse 2s infinite' : 'none'
+            }} />
+            <div style={{ textAlign: 'left' }}>
+              <div style={{
+                fontSize: '13px',
+                fontWeight: '500',
+                color: '#ffffff',
+                marginBottom: '2px'
+              }}>
+                {getStatusText()}
+              </div>
+              <div style={{
+                fontSize: '11px',
+                color: '#9ca3af'
+              }}>
+                Last: {lastUpdate}
+              </div>
+            </div>
+          </div>
+        </div>
+
+
+      </div>
+
+      {/* Action Buttons - Bottom Center */}
+      <div style={{
+        position: 'absolute',
+        bottom: '30px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        zIndex: 1000,
+        fontFamily: '"IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        display: 'flex',
+        gap: '12px',
+        alignItems: 'center'
+      }}>
+        {/* Refresh Button */}
+        <button
+          onClick={() => {
+            console.log('🔄 Manual refresh clicked');
+            fetchEvents();
+          }}
+          disabled={loading}
+          style={{
+            backgroundColor: loading ? 'rgba(107, 114, 128, 0.8)' : 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(10px)',
+            color: '#ffffff',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderRadius: '16px',
+            padding: '12px 20px',
+            fontSize: '14px',
+            fontWeight: '500',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+            transition: 'all 0.3s ease',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            minWidth: '120px',
+            justifyContent: 'center'
+          }}
+          onMouseEnter={(e) => {
+            if (!loading) {
+              e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.95)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 6px 25px rgba(0, 0, 0, 0.4)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!loading) {
+              e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.3)';
+            }
+          }}
+        >
+          {loading ? (
+            <>
+              <div style={{
+                width: '14px',
+                height: '14px',
+                border: '2px solid #ffffff',
+                borderTop: '2px solid transparent',
+                borderRadius: '14px',
+                animation: 'spin 1s linear infinite'
+              }} />
+              Loading...
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: '14px' }}>🔄</span>
+              Refresh
+            </>
+          )}
+        </button>
+
+        {/* Scrape Button */}
+        <button
+          onClick={handleScrapeTikTok}
+          disabled={isScraping}
+          style={{
+            backgroundColor: isScraping ? 'rgba(107, 114, 128, 0.8)' : 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(10px)',
+            color: '#ffffff',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderRadius: '16px',
+            padding: '12px 24px',
+            fontSize: '14px',
+            fontWeight: '500',
+            cursor: isScraping ? 'not-allowed' : 'pointer',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+            transition: 'all 0.3s ease',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            minWidth: '180px',
+            justifyContent: 'center'
+          }}
+          onMouseEnter={(e) => {
+            if (!isScraping) {
+              e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.95)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+              e.currentTarget.style.boxShadow = '0 6px 25px rgba(0, 0, 0, 0.4)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (!isScraping) {
+              e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.3)';
+            }
+          }}
+        >
+          {isScraping ? (
+            <>
+              <div style={{
+                width: '16px',
+                height: '16px',
+                border: '2px solid #ffffff',
+                borderTop: '2px solid transparent',
+                borderRadius: '16px',
+                animation: 'spin 1s linear infinite'
+              }} />
+              Scraping...
+            </>
+          ) : (
+            <>
+              <span style={{ fontSize: '16px' }}>🔍</span>
+              Scrape TikTok
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Additional CSS for button animations */}
+      <style dangerouslySetInnerHTML={{
+        __html: `
+          @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+          }
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+          @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+        `
+      }} />
+    </div>
+  );
+}
+

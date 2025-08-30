@@ -1,0 +1,14 @@
+{
+  "buildCommand": "prisma generate && prisma db push --accept-data-loss && next build",
+  "outputDirectory": ".next",
+  "framework": "nextjs",
+  "functions": {
+    "src/app/api/**/*.ts": {
+      "maxDuration": 30
+    }
+  },
+  "env": {
+    "PRISMA_GENERATE_DATAPROXY": "true",
+    "PRISMA_GENERATE_SKIP_DOWNLOAD": "true"
+  }
+}
