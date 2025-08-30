@@ -33,12 +33,12 @@ export default function RiotMap() {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('/api/events?limit=100'); // Remove type filter to get all events
+      const response = await fetch('/api/events?type=riot&limit=100');
       if (!response.ok) {
         throw new Error('Failed to fetch events');
       }
 
-      const data = await response.json();
+      const data = await response.json() as { success: boolean; events: Event[]; error?: string };
       if (data.success) {
         setEvents(data.events);
         console.log(`📍 Loaded ${data.events.length} events from database`);
@@ -141,33 +141,14 @@ export default function RiotMap() {
 
   // Function to update map markers
   const updateMapMarkers = () => {
-    if (!map.current) {
-      console.log('🗺️ Map instance not created yet');
-      return;
-    }
+    if (!map.current || !map.current.isStyleLoaded()) return;
 
-    if (!map.current.loaded) {
-      console.log('🗺️ Map not loaded yet, will retry...');
-      // Retry after a short delay
-      setTimeout(updateMapMarkers, 500);
-      return;
-    }
-
-    console.log(`📍 Updating map with ${events.length} events`);
     const eventData = createEventGeoJSON(events);
-    console.log('📋 Generated GeoJSON:', eventData.features.length, 'features');
-
-    // Log each event for debugging
-    events.forEach((event, index) => {
-      console.log(`📍 Event ${index + 1}: ${event.title.substring(0, 30)}... at [${event.lng}, ${event.lat}]`);
-    });
 
     // Update or create the events source
     if (map.current.getSource('events')) {
-      console.log('🔄 Updating existing events source');
       (map.current.getSource('events') as any).setData(eventData);
     } else {
-      console.log('➕ Creating new events source and layers');
       // Add source with clustering enabled
       map.current.addSource('events', {
         type: 'geojson',
@@ -255,10 +236,7 @@ export default function RiotMap() {
         id: 'other-circles',
         type: 'circle',
         source: 'events',
-        filter: ['all',
-          ['!in', ['get', 'type'], 'riot', 'protest'],
-          ['!', ['has', 'point_count']]
-        ],
+        filter: ['all', ['!=', ['get', 'type'], 'riot'], ['!=', ['get', 'type'], 'protest'], ['!', ['has', 'point_count']]],
         paint: {
           'circle-radius': 18,
           'circle-color': '#4444ff',
@@ -312,8 +290,7 @@ export default function RiotMap() {
       });
 
       // Add click events for individual events
-      const individualLayers = ['riot-circles', 'protest-circles', 'other-circles', 'event-emoji'];
-      individualLayers.forEach(layerId => {
+      ['riot-circles', 'protest-circles', 'other-circles', 'event-emoji'].forEach(layerId => {
         map.current.on('click', layerId, (e: any) => {
           const feature = e.features[0];
           const coordinates = feature.geometry.coordinates.slice();
@@ -385,58 +362,23 @@ export default function RiotMap() {
     const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
     if (!token) {
-      console.error('❌ NEXT_PUBLIC_MAPBOX_TOKEN is not set. Please add it to your .env.local file.');
-      setError('Mapbox token not configured');
+      console.error('NEXT_PUBLIC_MAPBOX_TOKEN is not set. Please add it to your .env.local file.');
       return;
     }
 
-    console.log('🗝️ Mapbox token configured');
     mapboxgl.accessToken = token;
 
-    try {
-      map.current = new mapboxgl.Map({
-        container: mapContainer.current,
-        style: "mapbox://styles/mapbox/dark-v11",
-        center: [106.8456, -6.2088], // Center on Jakarta
-        zoom: 11,
-        attributionControl: false
-      });
-
-      console.log('🗺️ Map instance created successfully');
-    } catch (error) {
-      console.error('❌ Failed to create map:', error);
-      setError('Failed to initialize map');
-      return;
-    }
-
-    map.current.on('error', (e: any) => {
-      console.error('❌ Map error:', e);
-      setError('Map loading error');
+    map.current = new mapboxgl.Map({
+      container: mapContainer.current,
+      style: "mapbox://styles/mapbox/dark-v11",
+      center: [106.8456, -6.2088], // Center on Jakarta
+      zoom: 11,
+      attributionControl: false
     });
 
     map.current.on('load', () => {
-      console.log('🗺️ Map loaded successfully!');
-      console.log('📍 Map center:', map.current.getCenter());
-      console.log('🔍 Map zoom:', map.current.getZoom());
-
-      // Add a test marker to verify map is working
-      const testMarker = new mapboxgl.Marker({ color: '#00ff00' })
-        .setLngLat([106.8456, -6.2088])
-        .setPopup(new mapboxgl.Popup().setHTML('<h3>🧪 Test Marker</h3><p>Map is working!</p>'))
-        .addTo(map.current);
-
-      console.log('✅ Test marker added');
-
-      // Small delay to ensure map is fully initialized
-      setTimeout(() => {
-        console.log(`🔄 Checking for ${events.length} events to display`);
-        if (events.length > 0) {
-          console.log('🚀 Initializing markers for existing events');
-          updateMapMarkers();
-        } else {
-          console.log('⚠️ No events to display yet');
-        }
-      }, 1000);
+      console.log('🗺️ Map loaded, waiting for events data...');
+      // Map markers will be added when events are fetched
     });
 
     return () => {
@@ -448,7 +390,6 @@ export default function RiotMap() {
 
   // Fetch events on mount and set up periodic refresh
   useEffect(() => {
-    console.log('🚀 Component mounted, fetching events...');
     fetchEvents();
 
     // Set up periodic refresh every 5 minutes
@@ -464,16 +405,6 @@ export default function RiotMap() {
 
   // Update map markers when events change
   useEffect(() => {
-    console.log(`🔄 Events updated: ${events.length} events received`);
-    if (events.length > 0) {
-      console.log('📍 Sample event:', {
-        id: events[0].id,
-        title: events[0].title.substring(0, 50) + '...',
-        lat: events[0].lat,
-        lng: events[0].lng,
-        type: events[0].type
-      });
-    }
     updateMapMarkers();
   }, [events]);
 
@@ -553,25 +484,10 @@ export default function RiotMap() {
                 fontSize: '11px',
                 color: '#9ca3af'
               }}>
-                {loading ? 'Loading events...' : error ? `❌ ${error}` : 'Live from database'}
+                {loading ? 'Loading events...' : error ? '❌ Error loading events' : 'Live from database'}
               </div>
             </div>
           </div>
-
-          {/* Debug Info */}
-          {events.length > 0 && (
-            <div style={{
-              paddingTop: '4px',
-              borderTop: '1px solid rgba(255, 255, 255, 0.05)',
-              marginBottom: '8px',
-              fontSize: '11px',
-              color: '#9ca3af'
-            }}>
-              <div>🔧 Debug: {events.length} events loaded</div>
-              <div>📍 First event: {events[0]?.title?.substring(0, 25)}...</div>
-              <div>📌 Coords: [{events[0]?.lng?.toFixed(4)}, {events[0]?.lat?.toFixed(4)}]</div>
-            </div>
-          )}
 
           {/* Legend */}
           <div style={{
@@ -660,10 +576,7 @@ export default function RiotMap() {
       }}>
         {/* Refresh Button */}
         <button
-          onClick={() => {
-            console.log('🔄 Manual refresh clicked');
-            fetchEvents();
-          }}
+          onClick={fetchEvents}
           disabled={loading}
           style={{
             backgroundColor: loading ? 'rgba(107, 114, 128, 0.8)' : 'rgba(0, 0, 0, 0.85)',
@@ -793,4 +706,3 @@ export default function RiotMap() {
     </div>
   );
 }
-
