@@ -39,3 +39,24 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# database files
+*.db
+*.db.backup
+migration-data.json
+
+# temporary and test files
+temp_*.json
+test_*.js
+*test*.js
+check_*.js
+
+# backups
+backups/
+*.backup
+
+# migration scripts (one-time use)
+migrate-*.js
+import-*.js
+generate-*.js
+fix-*.sql

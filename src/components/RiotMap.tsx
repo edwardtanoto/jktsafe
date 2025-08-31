@@ -3,6 +3,7 @@
 import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { useEffect, useRef, useState } from "react";
+import ChatBot from "./ChatBot";
 
 interface Event {
   id: number;
@@ -15,6 +16,11 @@ interface Event {
   verified: boolean;
   type: string;
   createdAt: string;
+  closureType?: string;
+  reason?: string;
+  severity?: string;
+  affectedRoutes?: string[];
+  alternativeRoutes?: string[];
 }
 
 export default function RiotMap() {
@@ -26,24 +32,43 @@ export default function RiotMap() {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [timeFilter, setTimeFilter] = useState<number>(24); // Default to 24 hours
 
   // Function to fetch events from database
-  const fetchEvents = async () => {
+  const fetchEvents = async (customTimeFilter?: number) => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await fetch('/api/events?type=riot&limit=100');
-      if (!response.ok) {
+      // Use the passed timeFilter or fall back to state
+      const activeTimeFilter = customTimeFilter !== undefined ? customTimeFilter : timeFilter;
+      
+      // Fetch both regular events and road closures with time filter
+      const timeParam = activeTimeFilter > 0 ? `&hours=${activeTimeFilter}` : '';
+      const [eventsResponse, roadClosuresResponse] = await Promise.all([
+        fetch(`/api/events?type=riot&limit=100${timeParam}`),
+        // For road closures: if activeTimeFilter is 0 (All), don't send hours param, otherwise send the activeTimeFilter value
+        fetch(`/api/road-closures${activeTimeFilter > 0 ? `?hours=${activeTimeFilter}` : ''}`)
+      ]);
+
+      if (!eventsResponse.ok) {
         throw new Error('Failed to fetch events');
       }
 
-      const data = await response.json() as { success: boolean; events: Event[]; error?: string };
-      if (data.success) {
-        setEvents(data.events);
-        console.log(`📍 Loaded ${data.events.length} events from database`);
+      const eventsData = await eventsResponse.json() as { success: boolean; events: Event[]; error?: string };
+      const roadClosuresData = await roadClosuresResponse.json() as { success: boolean; roadClosures: Event[]; error?: string };
+
+      if (eventsData.success && roadClosuresData.success) {
+        // Combine events and road closures, marking road closures appropriately
+        const allEvents = [
+          ...eventsData.events,
+          ...roadClosuresData.roadClosures.map(rc => ({ ...rc, type: 'road_closure' as const }))
+        ];
+
+        setEvents(allEvents);
+        console.log(`📍 Loaded ${eventsData.events.length} events and ${roadClosuresData.roadClosures.length} road closures from database`);
       } else {
-        throw new Error(data.error || 'Failed to fetch events');
+        throw new Error(eventsData.error || roadClosuresData.error || 'Failed to fetch data');
       }
     } catch (error) {
       console.error('❌ Error fetching events:', error);
@@ -51,6 +76,13 @@ export default function RiotMap() {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Function to handle time filter changes
+  const handleTimeFilterChange = (hours: number) => {
+    setTimeFilter(hours);
+    // Immediately fetch events with new time filter, passing the new value directly
+    fetchEvents(hours);
   };
 
   // Function to scrape TikTok for latest news
@@ -133,7 +165,12 @@ export default function RiotMap() {
           verified: event.verified,
           type: event.type,
           createdAt: event.createdAt,
-          emoji: event.type === 'riot' ? '🔥' : event.type === 'protest' ? '👥' : '📍'
+          severity: event.severity,
+          closureType: event.closureType,
+          reason: event.reason,
+          affectedRoutes: event.affectedRoutes,
+          alternativeRoutes: event.alternativeRoutes,
+          emoji: event.type === 'riot' ? '🔥' : event.type === 'protest' ? '👥' : event.type === 'road_closure' ? '🚧' : '📍'
         }
       }))
     };
@@ -231,12 +268,43 @@ export default function RiotMap() {
         }
       });
 
+      // Add circle layer for road closures
+      map.current.addLayer({
+        id: 'road-closure-circles',
+        type: 'circle',
+        source: 'events',
+        filter: ['all', ['==', ['get', 'type'], 'road_closure'], ['!', ['has', 'point_count']]],
+        paint: {
+          'circle-radius': [
+            'match',
+            ['get', 'severity'],
+            'low', 16,
+            'medium', 20,
+            'high', 24,
+            'critical', 28,
+            20 // default
+          ],
+          'circle-color': [
+            'match',
+            ['get', 'severity'],
+            'low', '#ffaa00',      // Orange for low
+            'medium', '#ff6600',   // Orange-red for medium
+            'high', '#ff0000',     // Red for high
+            'critical', '#990000', // Dark red for critical
+            '#ff0000' // default red
+          ],
+          'circle-stroke-color': '#ffffff',
+          'circle-stroke-width': 3,
+          'circle-opacity': 0.9
+        }
+      });
+
       // Add circle layer for individual other events
       map.current.addLayer({
         id: 'other-circles',
         type: 'circle',
         source: 'events',
-        filter: ['all', ['!=', ['get', 'type'], 'riot'], ['!=', ['get', 'type'], 'protest'], ['!', ['has', 'point_count']]],
+        filter: ['all', ['!=', ['get', 'type'], 'riot'], ['!=', ['get', 'type'], 'protest'], ['!=', ['get', 'type'], 'road_closure'], ['!', ['has', 'point_count']]],
         paint: {
           'circle-radius': 18,
           'circle-color': '#4444ff',
@@ -460,8 +528,14 @@ export default function RiotMap() {
             textAlign: 'left'
           }}>
             Safe Indonesia
+            <span style={{
+                fontSize: '11px',
+                color: '#9ca3af'
+              }}>
+                <p>Disclaimer: Reverify the map, I checked some isn't accurate.</p>
+              </span>
           </h1>
-
+          
           {/* Events Count */}
           <div style={{
             display: 'flex',
@@ -486,6 +560,62 @@ export default function RiotMap() {
               }}>
                 {loading ? 'Loading events...' : error ? '❌ Error loading events' : 'Live from database'}
               </div>
+            </div>
+          </div>
+
+          {/* Time Filter */}
+          <div style={{
+            paddingTop: '8px',
+            borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+            marginBottom: '8px',
+            pointerEvents: 'auto'
+          }}>
+            <div style={{
+              fontSize: '12px',
+              fontWeight: '500',
+              color: '#ffffff',
+              marginBottom: '6px'
+            }}>
+              Time Filter
+            </div>
+            <div style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '4px',
+              fontSize: '11px'
+            }}>
+              {[3, 6, 12, 24, 0].map((hours) => (
+                <button
+                  key={hours}
+                  onClick={() => handleTimeFilterChange(hours)}
+                  style={{
+                    padding: '4px 8px',
+                    borderRadius: '4px',
+                    border: '1px solid rgba(255, 255, 255, 0.2)',
+                    backgroundColor: timeFilter === hours ? 'rgba(255, 255, 255, 0.1)' : 'transparent',
+                    color: '#ffffff',
+                    cursor: 'pointer',
+                    fontSize: '10px',
+                    fontWeight: '500',
+                    transition: 'all 0.2s ease'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.15)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.backgroundColor = timeFilter === hours ? 'rgba(255, 255, 255, 0.1)' : 'transparent';
+                  }}
+                >
+                  {hours === 0 ? 'All' : `${hours}h`}
+                </button>
+              ))}
+            </div>
+            <div style={{
+              fontSize: '10px',
+              color: '#9ca3af',
+              marginTop: '4px'
+            }}>
+              Showing events from last {timeFilter === 0 ? 'all time' : `${timeFilter} hours`}
             </div>
           </div>
 
@@ -576,7 +706,7 @@ export default function RiotMap() {
       }}>
         {/* Refresh Button */}
         <button
-          onClick={fetchEvents}
+          onClick={() => fetchEvents()}
           disabled={loading}
           style={{
             backgroundColor: loading ? 'rgba(107, 114, 128, 0.8)' : 'rgba(0, 0, 0, 0.85)',
@@ -703,6 +833,9 @@ export default function RiotMap() {
           @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap');
         `
       }} />
+
+      {/* ChatBot Component */}
+      <ChatBot />
     </div>
   );
 }

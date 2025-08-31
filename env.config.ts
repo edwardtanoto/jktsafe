@@ -12,7 +12,7 @@ export const env = {
   rapidApi: {
     key: process.env.RAPIDAPI_KEY || ""
   },
-  serpApi: {
-    key: process.env.SERPAPI_KEY || ""
+  SERP_API: {
+    key: process.env.SERP_API_KEY || ""
   }
 };

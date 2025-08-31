@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { extractDetailedLocationFromTikTok } from '@/lib/openrouter';
-import { geocodeLocation } from '@/lib/mapbox-geocoding';
-import { geocodeWithSerp } from '@/lib/serp-geocoding';
+import { smartGeocodeLocation } from '@/lib/smart-geocoding';
 import { prisma } from '@/lib/prisma';
 
 import { Root, Video } from '@/types/tiktok';
@@ -9,6 +8,9 @@ import { Root, Video } from '@/types/tiktok';
 // Import shared progress tracking and rate limiter
 import { scrapingProgress, updateScrapingProgress, resetScrapingProgress } from '@/lib/scraping-progress';
 import { globalRateLimiter } from '@/lib/rate-limiter';
+
+// Import authentication middleware
+import { authenticateRequest, handleCors, getCorsHeaders } from '@/lib/auth-middleware';
 
 async function scrapeTikTokVideos(dateToday: string): Promise<Video[]> {
   try {
@@ -107,39 +109,30 @@ async function processTikTokVideo(video: Video): Promise<boolean> {
       console.log(`📍 All locations found: ${locationResult.all_locations.join(', ')}`);
     }
 
-    // Try geocoding with both services concurrently for better performance
-    console.log(`🌐 Geocoding location concurrently: ${locationResult.exact_location}`);
-
-    // Apply rate limiting before geocoding calls
-    await globalRateLimiter.waitForNextCall();
-
-    const [serpResult, mapboxResult] = await Promise.allSettled([
-      geocodeWithSerp(locationResult.exact_location),
-      geocodeLocation(locationResult.exact_location)
-    ]);
-
-    // Use SERP result if successful, otherwise fallback to Mapbox
-    let geocodeResult;
-    if (serpResult.status === 'fulfilled' && serpResult.value.success) {
-      geocodeResult = serpResult.value;
-      console.log(`✅ SERP geocoding successful`);
-    } else if (mapboxResult.status === 'fulfilled' && mapboxResult.value.success) {
-      geocodeResult = mapboxResult.value;
-      console.log(`✅ Mapbox geocoding successful (fallback)`);
-    } else {
-      console.log(`❌ All geocoding attempts failed for location "${locationResult.exact_location}"`);
-      return false;
-    }
+    // Use smart geocoding with cache-first approach
+    console.log(`🌐 Smart geocoding location: ${locationResult.exact_location}`);
+    const geocodeResult = await smartGeocodeLocation(locationResult.exact_location);
 
     if (!geocodeResult.success) {
       console.log(`❌ Failed to geocode location "${locationResult.exact_location}" for video: ${video.video_id}`);
+      if (geocodeResult.error) {
+        console.log(`   Error: ${geocodeResult.error}`);
+      }
       return false;
     }
 
     console.log(`📌 Coordinates: ${geocodeResult.lat}, ${geocodeResult.lng}`);
-    if ('formatted_address' in geocodeResult && geocodeResult.formatted_address) {
-      console.log(`🏷️ Formatted address: ${geocodeResult.formatted_address}`);
+    if (geocodeResult.formattedAddress) {
+      console.log(`🏷️ Formatted address: ${geocodeResult.formattedAddress}`);
     }
+    if (geocodeResult.cached) {
+      console.log(`💾 Result from cache`);
+    } else {
+      console.log(`🌐 Result from API (${geocodeResult.source})`);
+    }
+
+    // Generate Google Maps URL for coordinates verification
+    const googleMapsUrl = `https://www.google.com/maps?q=${geocodeResult.lat},${geocodeResult.lng}`;
 
     // Create event in database
     await prisma.event.create({
@@ -151,7 +144,9 @@ async function processTikTokVideo(video: Video): Promise<boolean> {
         source: 'TikTok',
         url: tiktokUrl,
         verified: false,
-        type: 'riot'
+        type: 'riot',
+        extractedLocation: locationResult.exact_location,
+        googleMapsUrl: googleMapsUrl
       }
     });
 
@@ -171,7 +166,33 @@ async function processTikTokVideo(video: Video): Promise<boolean> {
   }
 }
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
+  // Handle CORS preflight
+  const corsResponse = handleCors(request);
+  if (corsResponse) return corsResponse;
+
+  // TEMPORARY: Skip authentication for testing - REMOVE AFTER DEBUGGING
+  // Authenticate request
+  /*
+  const auth = authenticateRequest(request);
+  if (!auth.isValid) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: auth.error,
+        message: 'Authentication required for scraping operations'
+      },
+      {
+        status: 401,
+        headers: getCorsHeaders()
+      }
+    );
+  }
+  */
+
+  console.log('🚨 TEMPORARY: Scraping endpoint is PUBLIC for testing');
+  console.log('⚠️  REMOVE authentication bypass after debugging');
+
   const scrapingStartTime = Date.now();
 
   try {
@@ -186,7 +207,10 @@ export async function GET(_request: NextRequest) {
           percentage: scrapingProgress.totalVideos > 0 ?
             Math.round((scrapingProgress.processedVideos / scrapingProgress.totalVideos) * 100) : 0
         }
-      }, { status: 409 }); // Conflict status
+      }, {
+        status: 409,
+        headers: getCorsHeaders()
+      }); // Conflict status
     }
 
     console.log('🚀 Starting concurrent TikTok demo scraping...');
@@ -203,7 +227,10 @@ export async function GET(_request: NextRequest) {
           remainingCalls: 0,
           resetInSeconds: Math.ceil(timeUntilReset / 1000)
         }
-      }, { status: 429 }); // Too Many Requests
+      }, {
+        status: 429,
+        headers: getCorsHeaders()
+      }); // Too Many Requests
     }
 
     console.log(`📊 Rate limiter: ${remainingCalls} calls remaining, resets in ${Math.ceil(timeUntilReset / 1000)}s`);
@@ -313,7 +340,7 @@ export async function GET(_request: NextRequest) {
         resetInSeconds: Math.ceil(finalTimeUntilReset / 1000)
       },
       message: `Processed ${processedCount} demo locations from ${videos.length} TikTok videos in ${totalTime}ms`
-    });
+    }, { headers: getCorsHeaders() });
 
   } catch (error) {
     const totalTime = Date.now() - scrapingStartTime;
@@ -328,7 +355,10 @@ export async function GET(_request: NextRequest) {
     console.error(`❌ Error in TikTok scraping API (${totalTime}ms):`, error);
     return NextResponse.json(
       { success: false, error: 'Failed to scrape TikTok videos' },
-      { status: 500 }
+      {
+        status: 500,
+        headers: getCorsHeaders()
+      }
     );
   }
 }

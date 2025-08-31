@@ -9,17 +9,17 @@ export interface SerpGeocodeResult {
 
 export async function geocodeWithSerp(location: string): Promise<SerpGeocodeResult> {
   try {
-    const serpApiKey = process.env.SERPAPI_KEY;
-    if (!serpApiKey) {
+    const SERP_APIKey = process.env.SERP_API_KEY;
+    if (!SERP_APIKey) {
       return {
         success: false,
-        error: 'SERPAPI_KEY is not set in environment variables'
+        error: 'SERP_API_KEY is not set in environment variables'
       };
     }
 
     // Use SERP API to search for the location on Google Maps
     const searchQuery = `${location} Indonesia`;
-    const url = `https://serpapi.com/search.json?engine=google_maps&q=${encodeURIComponent(searchQuery)}&api_key=${serpApiKey}`;
+    const url = `https://SERPAPI.com/search.json?engine=google_maps&q=${encodeURIComponent(searchQuery)}&api_key=${SERP_APIKey}`;
 
     const response = await fetch(url);
     const data = await response.json();
