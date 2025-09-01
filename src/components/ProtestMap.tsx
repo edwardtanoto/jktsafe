@@ -638,6 +638,11 @@ export default function ProtestMap() {
       return;
     }
 
+    if (!mapContainer.current) {
+      console.error('Map container ref is not available');
+      return;
+    }
+
     mapboxgl.accessToken = token;
 
     // Get the initial style URL based on whether it's custom or standard

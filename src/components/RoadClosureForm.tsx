@@ -23,6 +23,17 @@ interface FallbackSuggestion extends LocationSuggestion {
   coordinates: [number, number];
 }
 
+// Add interface for Google Places API prediction
+interface GooglePlacesPrediction {
+  place_id: string;
+  description: string;
+  structured_formatting?: {
+    main_text: string;
+    secondary_text: string;
+  };
+  [key: string]: unknown;
+}
+
 export default function RoadClosureForm() {
   const [location, setLocation] = useState<string>('');
   const [locationSuggestions, setLocationSuggestions] = useState<LocationSuggestion[]>([]);
@@ -56,7 +67,7 @@ export default function RoadClosureForm() {
       if (data.success && data.status === 'OK') {
         // Get place details for each prediction to get coordinates
         const suggestionsWithDetails = await Promise.all(
-          data.predictions.slice(0, 8).map(async (prediction: Record<string, unknown>) => {
+          data.predictions.slice(0, 8).map(async (prediction: GooglePlacesPrediction) => {
             try {
               const detailsResponse = await fetch('/api/road-closures', {
                 method: 'PATCH',
@@ -112,7 +123,7 @@ export default function RoadClosureForm() {
   };
 
   // Create Google Maps-like display names
-  const getEnhancedDisplayName = (prediction: Record<string, unknown>) => {
+  const getEnhancedDisplayName = (prediction: GooglePlacesPrediction) => {
     // Google Places API structure
     if (prediction.structured_formatting) {
       const { main_text, secondary_text } = prediction.structured_formatting;

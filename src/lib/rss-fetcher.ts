@@ -106,7 +106,7 @@ export class TurnBackHoaxFetcher {
       }
 
       // Get last processed GUID from cache
-      const lastGuid = await this.redis.get('turnbackhoax:last_guid');
+      const lastGuid = await this.redis.get('turnbackhoax:last_guid') as string | null;
 
       // Fetch RSS feed
       const feedData = await this.fetchFeed();
@@ -299,8 +299,8 @@ export class TurnBackHoaxFetcher {
   private async shouldSkipFetch(): Promise<boolean> {
     try {
       // Check if we recently processed items
-      const lastFetch = await this.redis.get('turnbackhoax:last_successful_fetch');
-      const lastProcessedGuid = await this.redis.get('turnbackhoax:last_guid');
+      const lastFetch = await this.redis.get('turnbackhoax:last_successful_fetch') as string | null;
+      const lastProcessedGuid = await this.redis.get('turnbackhoax:last_guid') as string | null;
 
       if (!lastFetch) {
         // First run, don't skip
@@ -334,7 +334,7 @@ export class TurnBackHoaxFetcher {
 
           if (lastModified || etag) {
             const cacheKey = `feed:headers:${this.config.feedUrl}`;
-            const cachedHeaders = await this.redis.get(cacheKey);
+            const cachedHeaders = await this.redis.get(cacheKey) as string | null;
 
             if (cachedHeaders) {
               const parsed = JSON.parse(cachedHeaders);
@@ -378,11 +378,13 @@ export class TurnBackHoaxFetcher {
     isHealthy: boolean;
   }> {
     try {
-      const [lastFetch, lastGuid, errorCount] = await Promise.all([
+      const results = await Promise.all([
         this.redis.get('turnbackhoax:last_fetch'),
         this.redis.get('turnbackhoax:last_guid'),
         this.redis.get('turnbackhoax:error_count')
       ]);
+
+      const [lastFetch, lastGuid, errorCount] = results as [string | null, string | null, string | null];
 
       const errorCountNum = parseInt(errorCount || '0');
       const isHealthy = errorCountNum < 5; // Consider unhealthy if 5+ consecutive errors
