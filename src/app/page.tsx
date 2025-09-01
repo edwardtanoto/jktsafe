@@ -1,9 +1,9 @@
-import RiotMap from "@/components/RiotMap";
+import ProtestMap from "@/components/ProtestMap";
 
 export default function Home() {
   return (
     <div className="h-screen w-full">
-      <RiotMap />
+      <ProtestMap />
     </div>
   );
 }

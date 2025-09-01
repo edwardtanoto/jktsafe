@@ -280,21 +280,6 @@ export default function ProtestMap() {
         }
       });
 
-      // Add circle layer for individual protest events
-      map.current.addLayer({
-        id: 'protest-circles',
-        type: 'circle',
-        source: 'events',
-        filter: ['all', ['==', ['get', 'type'], 'protest'], ['!', ['has', 'point_count']]],
-        paint: {
-          'circle-radius': 18,
-          'circle-color': '#ffaa00',
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 2,
-          'circle-opacity': 0.8
-        }
-      });
-
       // Add circle layer for road closures
       map.current.addLayer({
         id: 'road-closure-circles',
@@ -341,20 +326,7 @@ export default function ProtestMap() {
         }
       });
 
-      // Add circle layer for individual other events
-      map.current.addLayer({
-        id: 'other-circles',
-        type: 'circle',
-        source: 'events',
-        filter: ['all', ['!=', ['get', 'type'], 'protest'], ['!=', ['get', 'type'], 'road_closure'], ['!=', ['get', 'type'], 'warning'], ['!', ['has', 'point_count']]],
-        paint: {
-          'circle-radius': 18,
-          'circle-color': '#4444ff',
-          'circle-stroke-color': '#ffffff',
-          'circle-stroke-width': 2,
-          'circle-opacity': 0.8
-        }
-      });
+
 
       // Add text layer for individual event emojis
       map.current.addLayer({
@@ -404,7 +376,7 @@ export default function ProtestMap() {
       });
 
       // Add click events for individual events
-      ['protest-circles', 'road-closure-circles', 'warning-circles', 'other-circles', 'event-emoji'].forEach(layerId => {
+      ['protest-circles', 'road-closure-circles', 'warning-circles', 'event-emoji'].forEach(layerId => {
         map.current.on('click', layerId, (e: any) => {
           const feature = e.features[0];
           const coordinates = feature.geometry.coordinates.slice();
@@ -818,7 +790,7 @@ export default function ProtestMap() {
 
     // Set up periodic refresh every 5 minutes (fallback for when EventSource fails)
     const refreshInterval = setInterval(() => {
-      if (!loading && !isScraping) {
+      if (!loading) {
         console.log('🔄 Periodic refresh of events (fallback)...');
         fetchEvents();
       }
@@ -851,8 +823,21 @@ export default function ProtestMap() {
   };
 
   return (
-    <div id="map" style={{ width: '100%', height: '100vh', position: 'relative' }}>
-      <div ref={mapContainer} style={{ height: '100vh', width: '100%' }} />
+    <div id="map" style={{
+      width: '100%',
+      height: '100vh',
+      position: 'relative',
+      // Add padding to prevent circle clipping on edges
+      padding: '10px',
+      boxSizing: 'border-box'
+    }}>
+      <div ref={mapContainer} style={{
+        height: 'calc(100vh - 20px)',
+        width: '100%',
+        // Ensure map can render circles that extend beyond bounds
+        overflow: 'hidden',
+        borderRadius: '8px'
+      }} />
 
       {/* UI Overlay */}
       <div style={{
@@ -1044,16 +1029,6 @@ export default function ProtestMap() {
                       width: '12px', 
                       height: '12px', 
                       borderRadius: '50%', 
-                      backgroundColor: '#f59e0b',
-                      boxShadow: '0 1px 3px rgba(245, 158, 11, 0.3)'
-                    }}></div>
-                    <span style={{ fontWeight: '500' }}>Protest</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ 
-                      width: '12px', 
-                      height: '12px', 
-                      borderRadius: '50%', 
                       backgroundColor: '#ff0000',
                       border: '2px solid #ffffff',
                       boxShadow: '0 1px 3px rgba(255, 0, 0, 0.4)'
@@ -1193,12 +1168,12 @@ export default function ProtestMap() {
             {/* Filter Menu FAB */}
             <button
               onClick={() => {
-                // Cycle through filters on mobile
-                const filters = ['all', 'warnings', 'road_closures', 'protests'] as const;
+                // Cycle through filters on mobile: protest -> road closure -> warning -> all -> protest...
+                const filters = ['protests', 'road_closures', 'warnings', 'all'] as const;
                 const currentIndex = filters.indexOf(eventFilter);
                 const nextIndex = (currentIndex + 1) % filters.length;
                 setEventFilter(filters[nextIndex]);
-                setFabMenuOpen(false);
+                // Keep FAB menu open when filter is clicked
               }}
               style={{
                 width: '48px',
@@ -1232,7 +1207,7 @@ export default function ProtestMap() {
                 switch (eventFilter) {
                   case 'warnings': return '⚠️';
                   case 'road_closures': return '🚧';
-                  case 'protests': return '🔥';
+                  case 'protests': return '💬';
                   default: return '📍';
                 }
               })()}
@@ -1346,57 +1321,55 @@ export default function ProtestMap() {
           )}
         </button>
 
-        {/* Event Filter Dropdown */}
-        <div style={{ position: 'relative' }}>
-          <select
-            value={eventFilter}
-            onChange={(e) => setEventFilter(e.target.value as typeof eventFilter)}
-            style={{
-              backgroundColor: 'rgba(0, 0, 0, 0.85)',
-              backdropFilter: 'blur(10px)',
-              color: '#ffffff',
-              border: '1px solid rgba(255, 255, 255, 0.2)',
-              borderRadius: '16px',
-              padding: '12px 16px',
-              fontSize: '14px',
-              fontWeight: '500',
-              cursor: 'pointer',
-              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
-              transition: 'all 0.3s ease',
-              minWidth: '160px',
-              outline: 'none',
-              appearance: 'none',
-              backgroundImage: `url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e")`,
-              backgroundRepeat: 'no-repeat',
-              backgroundPosition: 'right 12px center',
-              backgroundSize: '16px',
-              paddingRight: '40px'
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.95)';
-              e.currentTarget.style.transform = 'translateY(-2px)';
-              e.currentTarget.style.boxShadow = '0 6px 25px rgba(0, 0, 0, 0.4)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
-              e.currentTarget.style.transform = 'translateY(0)';
-              e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.3)';
-            }}
-          >
-            <option value="all" style={{ backgroundColor: 'rgba(0, 0, 0, 0.9)', color: '#ffffff' }}>
-              📍 All Events
-            </option>
-            <option value="warnings" style={{ backgroundColor: 'rgba(0, 0, 0, 0.9)', color: '#ffffff' }}>
-              ⚠️ Warnings Only
-            </option>
-            <option value="road_closures" style={{ backgroundColor: 'rgba(0, 0, 0, 0.9)', color: '#ffffff' }}>
-              🚧 Road Closures
-            </option>
-            <option value="protests" style={{ backgroundColor: 'rgba(0, 0, 0, 0.9)', color: '#ffffff' }}>
-            💬 Protests Only
-            </option>
-          </select>
-        </div>
+        {/* Event Filter Toggle Button */}
+        <button
+          onClick={() => {
+            // Cycle through filters on desktop: protest -> road closure -> warning -> all -> protest...
+            const filters = ['protests', 'road_closures', 'warnings', 'all'] as const;
+            const currentIndex = filters.indexOf(eventFilter);
+            const nextIndex = (currentIndex + 1) % filters.length;
+            setEventFilter(filters[nextIndex]);
+          }}
+          style={{
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(10px)',
+            color: '#ffffff',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderRadius: '16px',
+            padding: '12px 16px',
+            fontSize: '14px',
+            fontWeight: '500',
+            cursor: 'pointer',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+            transition: 'all 0.3s ease',
+            minWidth: '160px',
+            outline: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.95)';
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 6px 25px rgba(0, 0, 0, 0.4)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.3)';
+          }}
+        >
+          {(() => {
+            switch (eventFilter) {
+              case 'protests': return <>💬 Protests</>;
+              case 'road_closures': return <>🚧 Road Closures</>;
+              case 'warnings': return <>⚠️ Warnings</>;
+              case 'all':
+              default: return <>📍 All Events</>;
+            }
+          })()}
+        </button>
 
 
         </div>

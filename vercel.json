@@ -5,16 +5,19 @@
   "functions": {
     "src/app/api/**/*.ts": {
       "maxDuration": 30
+    },
+    "src/app/api/scrape/cron/route.ts": {
+      "maxDuration": 900
     }
   },
   "crons": [
     {
-      "path": "/api/scrape/tiktok",
+      "path": "/api/scrape/cron",
       "schedule": "0 12-23,0-1 * * *",
       "comment": "Peak hours: 12pm-2am (every hour)"
     },
     {
-      "path": "/api/scrape/tiktok",
+      "path": "/api/scrape/cron",
       "schedule": "0 2,4,6,8,10 * * *",
       "comment": "Conserve hours: 2am-12pm (every 2 hours)"
     }

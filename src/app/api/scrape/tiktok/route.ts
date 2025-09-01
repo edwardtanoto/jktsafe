@@ -184,7 +184,7 @@ async function processTikTokVideo(video: Video): Promise<boolean> {
           source: 'TikTok',
           url: tiktokUrl,
           verified: false,
-          type: 'riot',
+          type: 'protest',
           extractedLocation: locationResult.exact_location,
           googleMapsUrl: googleMapsUrl,
           originalCreatedAt: originalCreatedAt
@@ -230,20 +230,25 @@ export async function GET(request: NextRequest) {
   const corsResponse = handleCors(request);
   if (corsResponse) return corsResponse;
 
-  // Authenticate scrape request
-  const auth = authenticateScrapeRequest(request);
-  if (!auth.isValid) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: auth.error,
-        message: 'Authentication required for scraping operations'
-      },
-      {
-        status: 401,
-        headers: getCorsHeaders()
-      }
-    );
+  // Check if this is a cron job request (internal call from /api/scrape/cron)
+  const isInternalCronCall = request.headers.get('x-internal-cron') === 'true';
+
+  // Authenticate scrape request (skip for internal cron calls)
+  if (!isInternalCronCall) {
+    const auth = authenticateScrapeRequest(request);
+    if (!auth.isValid) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: auth.error,
+          message: 'Authentication required for scraping operations'
+        },
+        {
+          status: 401,
+          headers: getCorsHeaders()
+        }
+      );
+    }
   }
 
   console.log('🔐 Scrape request authenticated successfully');

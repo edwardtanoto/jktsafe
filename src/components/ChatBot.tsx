@@ -23,7 +23,7 @@ export default function ChatBot() {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
-      text: 'Halo! Saya adalah asisten Safe Indonesia. Anda bisa bertanya tentang demonstrasi, kerusuhan, atau situasi keamanan terkini. Coba tanyakan "ada demo dimana?"',
+      text: 'Halo! Saya adalah asisten Safe Indonesia. Anda bisa bertanya tentang demonstrasi, kerusuhan, atau situasi keamanan terkini. Coba tanyakan "ada demo dimana?" Berikan hoax tersebar hari ini.',
       sender: 'bot',
       timestamp: new Date()
     }

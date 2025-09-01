@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const type = searchParams.get('type'); // 'riot', 'protest', etc.
+    const type = searchParams.get('type'); // 'protest', 'demonstration', etc.
     const verified = searchParams.get('verified'); // 'true', 'false', or null for all
     const limit = parseInt(searchParams.get('limit') || '100');
     const hours = parseInt(searchParams.get('hours') || '0'); // 0 means no time filter
