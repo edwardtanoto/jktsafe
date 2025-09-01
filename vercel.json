@@ -9,17 +9,20 @@
     "src/app/api/scrape/cron/route.ts": {
       "maxDuration": 800
     },
+    "src/app/api/scrape/tiktok/route.ts": {
+      "maxDuration": 800
+    },
     "src/app/api/rss/fetch/route.ts": {
       "maxDuration": 120
     }
   },
   "crons": [
     {
-      "path": "/api/scrape/cron",
+      "path": "/api/scrape/tiktok",
       "schedule": "0 12-23,0-1 * * *"
     },
     {
-      "path": "/api/scrape/cron",
+      "path": "/api/scrape/tiktok",
       "schedule": "0 2,4,6,8,10 * * *"
     },
     {

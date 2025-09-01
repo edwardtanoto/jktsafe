@@ -267,17 +267,30 @@ export async function GET(request: NextRequest) {
   const corsResponse = handleCors(request);
   if (corsResponse) return corsResponse;
 
-  // Check if this is a cron job request (internal call from /api/scrape/cron)
+  // Check authentication: Vercel cron jobs or manual API calls
+  const authHeader = request.headers.get('authorization');
+  const isVercelCronJob = authHeader === `Bearer ${process.env.CRON_SECRET}`;
   const isInternalCronCall = request.headers.get('x-internal-cron') === 'true';
   const scrapeSecret = request.headers.get('x-scrape-secret');
 
   console.log('🔍 Authentication check:');
+  console.log(`  - authorization header: ${authHeader ? 'Present' : 'Missing'}`);
+  console.log(`  - CRON_SECRET match: ${isVercelCronJob}`);
   console.log(`  - x-internal-cron: ${isInternalCronCall}`);
   console.log(`  - x-scrape-secret: ${scrapeSecret ? 'Present' : 'Missing'}`);
+  console.log(`  - Environment CRON_SECRET: ${process.env.CRON_SECRET ? 'Set' : 'Missing'}`);
   console.log(`  - Environment SCRAPE_SECRET: ${process.env.SCRAPE_SECRET ? 'Set' : 'Missing'}`);
 
-  // Skip authentication for internal cron calls, authenticate external calls
-  if (!isInternalCronCall) {
+  // Allow Vercel cron jobs with CRON_SECRET
+  if (isVercelCronJob) {
+    console.log(`🔐 Vercel cron job authenticated with CRON_SECRET`);
+  }
+  // Allow internal cron calls from /api/scrape/cron
+  else if (isInternalCronCall) {
+    console.log(`🔐 Internal cron call - skipping authentication`);
+  }
+  // Require authentication for external API calls
+  else {
     console.log(`🔐 External request - checking authentication...`);
     const auth = authenticateScrapeRequest(request);
     if (!auth.isValid) {
@@ -295,8 +308,6 @@ export async function GET(request: NextRequest) {
       );
     }
     console.log(`✅ External request authenticated`);
-  } else {
-    console.log(`🔐 Internal cron call - skipping authentication`);
   }
 
   console.log('🔐 Scrape request authenticated successfully');
