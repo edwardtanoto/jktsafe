@@ -131,30 +131,67 @@ async function processTikTokVideo(video: Video): Promise<boolean> {
       console.log(`📍 All locations found: ${locationResult.all_locations.join(', ')}`);
     }
 
-    // Use smart geocoding with cache-first approach
-    console.log(`🌐 Smart geocoding location: ${locationResult.exact_location}`);
-    const geocodeResult = await smartGeocodeLocation(locationResult.exact_location);
+    // Extract all unique locations for batch geocoding
+    const locationsToGeocode = [];
+    if (locationResult.exact_location) {
+      locationsToGeocode.push(locationResult.exact_location);
+    }
+    if (locationResult.all_locations && locationResult.all_locations.length > 0) {
+      // Add all locations and remove duplicates
+      const uniqueLocations = [...new Set(locationResult.all_locations)];
+      locationsToGeocode.push(...uniqueLocations);
+    }
 
-    if (!geocodeResult.success) {
-      console.log(`❌ Failed to geocode location "${locationResult.exact_location}" for video: ${video.video_id}`);
-      if (geocodeResult.error) {
-        console.log(`   Error: ${geocodeResult.error}`);
+    // Remove duplicates while preserving order (exact_location first)
+    const uniqueLocationsToGeocode = [...new Set(locationsToGeocode)];
+
+    console.log(`🗺️ Locations to geocode: ${uniqueLocationsToGeocode.join(', ')}`);
+
+    // Use batch geocoding for all locations
+    const { smartGeocodeLocations } = await import('@/lib/smart-geocoding');
+    const geocodeResults = await smartGeocodeLocations(uniqueLocationsToGeocode);
+
+    // Find the best geocoding result
+    let bestGeocodeResult = null;
+    let bestLocation = null;
+
+    for (const [location, result] of geocodeResults) {
+      if (result.success) {
+        // Prefer exact_location if it geocoded successfully
+        if (location === locationResult.exact_location) {
+          bestGeocodeResult = result;
+          bestLocation = location;
+          break;
+        }
+        // Otherwise use the first successful result
+        if (!bestGeocodeResult) {
+          bestGeocodeResult = result;
+          bestLocation = location;
+        }
       }
+    }
+
+    if (!bestGeocodeResult) {
+      console.log(`❌ Failed to geocode any location for video: ${video.video_id}`);
+      console.log(`   Tried locations: ${uniqueLocationsToGeocode.join(', ')}`);
       return false;
     }
 
-    console.log(`📌 Coordinates: ${geocodeResult.lat}, ${geocodeResult.lng}`);
-    if (geocodeResult.formattedAddress) {
-      console.log(`🏷️ Formatted address: ${geocodeResult.formattedAddress}`);
+    console.log(`✅ Best geocoding result: "${bestLocation}"`);
+    console.log(`📌 Coordinates: ${bestGeocodeResult.lat}, ${bestGeocodeResult.lng}`);
+
+    // Log geocoding result details
+    if (bestGeocodeResult.formattedAddress) {
+      console.log(`🏷️ Formatted address: ${bestGeocodeResult.formattedAddress}`);
     }
-    if (geocodeResult.cached) {
+    if (bestGeocodeResult.cached) {
       console.log(`💾 Result from cache`);
     } else {
-      console.log(`🌐 Result from API (${geocodeResult.source})`);
+      console.log(`🌐 Result from API (${bestGeocodeResult.source})`);
     }
 
     // Generate Google Maps URL for coordinates verification
-    const googleMapsUrl = `https://www.google.com/maps?q=${geocodeResult.lat},${geocodeResult.lng}`;
+    const googleMapsUrl = `https://www.google.com/maps?q=${bestGeocodeResult.lat},${bestGeocodeResult.lng}`;
 
     // Convert TikTok create_time (Unix timestamp) to Date
     const originalCreatedAt = new Date(video.create_time * 1000);
@@ -168,10 +205,10 @@ async function processTikTokVideo(video: Video): Promise<boolean> {
         update: {
           title: `Demo Activity - ${video.author.nickname}`,
           description: video.title,
-          lat: geocodeResult.lat!,
-          lng: geocodeResult.lng!,
+          lat: bestGeocodeResult.lat!,
+          lng: bestGeocodeResult.lng!,
           verified: false,
-          extractedLocation: locationResult.exact_location,
+          extractedLocation: bestLocation,
           googleMapsUrl: googleMapsUrl,
           originalCreatedAt: originalCreatedAt,
           updatedAt: new Date()
@@ -179,13 +216,13 @@ async function processTikTokVideo(video: Video): Promise<boolean> {
         create: {
           title: `Demo Activity - ${video.author.nickname}`,
           description: video.title,
-          lat: geocodeResult.lat!,
-          lng: geocodeResult.lng!,
+          lat: bestGeocodeResult.lat!,
+          lng: bestGeocodeResult.lng!,
           source: 'TikTok',
           url: tiktokUrl,
           verified: false,
           type: 'protest',
-          extractedLocation: locationResult.exact_location,
+          extractedLocation: bestLocation,
           googleMapsUrl: googleMapsUrl,
           originalCreatedAt: originalCreatedAt
         }
@@ -194,11 +231,11 @@ async function processTikTokVideo(video: Video): Promise<boolean> {
       // Publish new event to Redis for live updates
       await publishNewEvent(result.id, 'created', {
         title: result.title,
-        lat: result.lat,
-        lng: result.lng,
+        lat: bestGeocodeResult.lat,
+        lng: bestGeocodeResult.lng,
         type: result.type,
         source: result.source,
-        extractedLocation: result.extractedLocation
+        extractedLocation: bestLocation
       });
 
     } catch (dbError) {
@@ -211,7 +248,7 @@ async function processTikTokVideo(video: Video): Promise<boolean> {
 
     const processingTime = Date.now() - startTime;
     console.log(`✅ Successfully processed TikTok video: ${video.video_id}`);
-    console.log(`📍 Location: ${locationResult.exact_location} (${geocodeResult.lat}, ${geocodeResult.lng})`);
+    console.log(`📍 Location: ${bestLocation} (${bestGeocodeResult.lat}, ${bestGeocodeResult.lng})`);
     console.log(`🔗 TikTok: ${tiktokUrl}`);
     console.log(`⏱️ Processing time: ${processingTime}ms`);
     console.log(`---`);

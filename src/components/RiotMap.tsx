@@ -70,7 +70,7 @@ export default function ProtestMap() {
       // Fetch regular events, road closures, and warning markers with time filter
       const timeParam = activeTimeFilter > 0 ? `&hours=${activeTimeFilter}` : '';
       const [eventsResponse, roadClosuresResponse, warningMarkersResponse] = await Promise.all([
-        fetch(`/api/events?type=protest&limit=100${timeParam}`),
+        fetch(`/api/events?type=protest${timeParam}`),
         // For road closures: if activeTimeFilter is 0 (All), don't send hours param, otherwise send the activeTimeFilter value
         fetch(`/api/road-closures${activeTimeFilter > 0 ? `?hours=${activeTimeFilter}` : ''}`),
         // Fetch warning markers with minimum confidence threshold
@@ -1104,9 +1104,9 @@ export default function ProtestMap() {
                       animation: scrapingStatus === 'scraping' ? 'pulse 2s infinite' : 'none'
                     }} />
                     <span style={{
-                      fontSize: '12px',
-                      fontWeight: '500',
-                      color: '#ffffff'
+                      fontSize: isMobile ? '9px' : '10px',
+                      color: '#9ca3af',
+                      fontWeight: '100',
                     }}>
                       {getStatusText()} - Updates every 1 hour
                     </span>

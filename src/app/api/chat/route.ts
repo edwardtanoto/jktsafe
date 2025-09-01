@@ -2,12 +2,20 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { authenticateRequest, handleCors, getCorsHeaders } from '@/lib/auth-middleware';
 import OpenAI from 'openai';
+import { hoaxProcessor } from '@/lib/hoax-data-processor';
 
 // Initialize OpenAI with OpenRouter
 const openai = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
   apiKey: process.env.OPENROUTER_API_KEY
 });
+
+// Hoax-related keywords for detection
+const HOAX_KEYWORDS = [
+  'hoax', 'bohong', 'palsu', 'penipuan', 'scam', 'tipu', 'manipulasi',
+  'turnbackhoax', 'cek fakta', 'verifikasi', 'bantah', 'klarifikasi',
+  'disinformasi', 'misinformasi', 'propaganda', 'fitnah', 'hasut'
+];
 
 // Simple hash-based embedding function (matches generate-embeddings.js)
 function generateSimpleEmbedding(text: string): number[] {
@@ -28,6 +36,7 @@ interface ChatRequest {
   context?: {
     currentView?: string;
     timeRange?: string;
+    includeHoaxes?: boolean;
   };
 }
 
@@ -70,8 +79,16 @@ export async function POST(request: NextRequest) {
     // Fetch relevant events using vector search (RAG)
     const events = await getSimilarEvents(queryEmbedding);
 
+    // Check if this is a hoax-related query
+    const isHoaxQuery = detectHoaxQuery(message);
+    let hoaxResults = null;
+
+    if (isHoaxQuery || context?.includeHoaxes) {
+      hoaxResults = await searchRelevantHoaxes(message);
+    }
+
     // Generate LLM response with retrieved context
-    const response = await generateChatResponse(message, events, context);
+    const response = await generateChatResponse(message, events, hoaxResults, context);
 
     return NextResponse.json({
       success: true,
@@ -89,28 +106,9 @@ export async function POST(request: NextRequest) {
 
 async function getSimilarEvents(queryEmbedding: number[]): Promise<EventData[]> {
   try {
-    // Use vector similarity search to find relevant events
-    const similarEvents = await prisma.$queryRaw`
-      SELECT
-        id,
-        title,
-        description,
-        lat,
-        lng,
-        type,
-        "extractedLocation",
-        "createdAt",
-        verified,
-        source,
-        url,
-        1 - (embedding <=> ${JSON.stringify(queryEmbedding)}::vector) as similarity
-      FROM events
-      WHERE embedding IS NOT NULL
-        AND (1 - (embedding <=> ${JSON.stringify(queryEmbedding)}::vector)) > 0.1
-        AND "createdAt" >= NOW() - INTERVAL '6 hours'
-      ORDER BY embedding <=> ${JSON.stringify(queryEmbedding)}::vector
-      LIMIT 15
-    `;
+    // For now, skip vector similarity search and use basic filtering
+    // TODO: Re-enable when embedding column is added to events table
+    const similarEvents = [];
 
     // Also get some recent events as fallback
     const recentEvents = await prisma.event.findMany({
@@ -296,7 +294,7 @@ async function getRecentEventsFallback(): Promise<EventData[]> {
   }
 }
 
-async function generateChatResponse(message: string, events: EventData[], context: any) {
+async function generateChatResponse(message: string, events: EventData[], hoaxResults: any[] | null, context: any) {
   try {
     // Format events data for LLM context
     const eventsContext = events.map(event => {
@@ -329,15 +327,39 @@ async function generateChatResponse(message: string, events: EventData[], contex
       }
     });
 
+    // Format hoax data for LLM context
+    const hoaxContext = hoaxResults && hoaxResults.length > 0 ? hoaxResults.map((hoax, index) => ({
+      id: hoax.id,
+      title: hoax.title,
+      originalClaim: hoax.originalClaim || 'N/A',
+      category: hoax.hoaxCategory,
+      verificationMethod: hoax.verificationMethod || 'N/A',
+      investigationResult: hoax.investigationResult || 'N/A',
+      author: hoax.authorName || 'TurnBackHoax',
+      sourceUrl: hoax.sourceUrl,
+      publicationDate: formatTimeAgo(hoax.publicationDate),
+      similarity: hoax.similarity || 0.5
+    })) : [];
+
     const systemPrompt = `Kamu adalah asisten informasi keamanan untuk Safe Indonesia.
 Bantu pengguna dengan pertanyaan tentang demonstrasi, kerusuhan, dan situasi keamanan di Indonesia.
 
 INFORMASI TERBARU DARI DATABASE (${events.length} kejadian dalam 6 jam terakhir):
 ${JSON.stringify(eventsContext, null, 2)}
 
+${hoaxResults && hoaxResults.length > 0 ? `
+INFORMASI HOAX DARI TURNBACKHOAX.ID (${hoaxResults.length} hasil pencarian):
+${JSON.stringify(hoaxContext, null, 2)}
+
+KATEGORI HOAX:
+- SALAH: Konten yang salah/palsu/fabricated/misleading
+- PENIPUAN: Konten penipuan/scam/impostor
+` : ''}
+
 JENIS DATA YANG TERSEDIA:
 1. WARNING MARKERS (type: "warning"): Peringatan demonstrasi dari Twitter dengan confidence score
 2. EVENTS (type: "protest", "demonstration"): Kejadian dari TikTok dan sumber lain
+${hoaxResults && hoaxResults.length > 0 ? '3. HOAX FACT-CHECKS: Verifikasi hoaks dari TurnBackHoax.ID' : ''}
 
 PETUNJUK KHUSUS UNTUK PERTANYAAN DEMONSTRASI:
 - Ketika ditanya "ada rencana demo dimana" atau pertanyaan serupa, prioritaskan WARNING MARKERS
@@ -345,6 +367,15 @@ PETUNJUK KHUSUS UNTUK PERTANYAAN DEMONSTRASI:
 - Sertakan confidence score untuk warning markers
 - Sebutkan jumlah views dan retweets untuk menunjukkan tingkat perhatian publik
 - Berikan informasi lokasi yang spesifik
+
+PETUNJUK KHUSUS UNTUK PERTANYAAN HOAX:
+- Ketika ditanya tentang hoax atau informasi yang perlu diverifikasi, gunakan data TurnBackHoax.ID
+- Sertakan kategori hoax (SALAH/PENIPUAN) dan metode verifikasi
+- Jelaskan hasil investigasi dengan bahasa yang mudah dipahami
+- SELALU sertakan link ke sumber asli TurnBackHoax.ID
+- Jika tidak menemukan hoax yang relevan, katakan dengan jujur
+- Tekankan bahwa informasi berasal dari sumber terpercaya (TurnBackHoax.ID)
+- Untuk hoax, sertakan informasi tentang kapan hoax tersebut dipublikasikan
 
 PETUNJUK UMUM:
 - Jawab dalam bahasa Indonesia yang natural dan mudah dipahami
@@ -354,7 +385,7 @@ PETUNJUK UMUM:
 - Jika tidak ada data terkini, katakan dengan jujur
 - Jangan berikan informasi yang tidak akurat atau spekulatif
 - Jika pertanyaan tidak terkait keamanan, arahkan kembali ke topik utama
-- SELALU sertakan link (Twitter/TikTok) jika tersedia untuk setiap kejadian
+- SELALU sertakan link (Twitter/TikTok/TurnBackHoax) jika tersedia untuk setiap kejadian
 
 FORMAT JAWABAN:
 - Gunakan emoji yang relevan (📍 untuk lokasi, ⏰ untuk waktu, ✅ untuk terverifikasi, ⚠️ untuk warning, 🔗 untuk link)
@@ -362,7 +393,7 @@ FORMAT JAWABAN:
 - Berikan konteks waktu yang jelas ("2 jam lalu", "kemarin", dll)
 - Untuk warning markers: sertakan confidence score dan engagement metrics
 - FORMAT LINK: Gunakan field markdownLink yang sudah tersedia dalam data
-- Contoh format yang benar: 🔗 [Twitter](https://twitter.com/i/status/123) atau [TikTok](https://tiktok.com/@user/video/123)
+- Contoh format yang benar: 🔗 [Twitter](https://twitter.com/i/status/123) atau [TikTok](https://tiktok.com/@user/video/123) atau [TurnBackHoax.ID](https://turnbackhoax.id/...)
 - Field markdownLink sudah berisi format yang tepat untuk hyperlink
 - Jika tidak ada link, akan muncul "Tidak ada link tersedia"`;
 
@@ -417,6 +448,76 @@ function formatTimeAgo(date: Date): string {
   } else {
     return `${diffDays} hari lalu`;
   }
+}
+
+// Hoax detection functions
+function detectHoaxQuery(message: string): boolean {
+  const lowerMessage = message.toLowerCase();
+
+  // Check for explicit hoax keywords
+  const hasHoaxKeyword = HOAX_KEYWORDS.some(keyword =>
+    lowerMessage.includes(keyword)
+  );
+
+  if (hasHoaxKeyword) {
+    return true;
+  }
+
+  // Check for question patterns that might be about hoaxes
+  const hoaxQuestionPatterns = [
+    /apakah.*hoax/i,
+    /benarkah/i,
+    /klarifikasi/i,
+    /bantah/i,
+    /cek.*fakta/i,
+    /verifikasi/i,
+    /benar.*tidak/i,
+    /palsu.*tidak/i
+  ];
+
+  return hoaxQuestionPatterns.some(pattern => pattern.test(lowerMessage));
+}
+
+async function searchRelevantHoaxes(message: string): Promise<any[]> {
+  try {
+    // Generate embedding for the message
+    const queryEmbedding = generateSimpleEmbedding(message);
+
+    // Search for relevant hoaxes
+    const hoaxResults = await hoaxProcessor.findSimilarHoaxes(queryEmbedding, 3);
+
+    if (hoaxResults.length === 0) {
+      // Fallback to keyword search
+      const keywords = extractHoaxKeywords(message);
+      if (keywords.length > 0) {
+        return await hoaxProcessor.searchByKeywords(keywords, undefined, 3);
+      }
+    }
+
+    return hoaxResults;
+
+  } catch (error) {
+    console.error('Error searching hoaxes:', error);
+    return [];
+  }
+}
+
+function extractHoaxKeywords(message: string): string[] {
+  const lowerMessage = message.toLowerCase();
+
+  // Extract potential keywords for hoax search
+  const words = lowerMessage.split(/\s+/).filter(word =>
+    word.length > 2 &&
+    !['yang', 'dan', 'atau', 'dengan', 'di', 'ke', 'dari', 'pada', 'untuk', 'adalah'].includes(word)
+  );
+
+  // Prioritize hoax-related words and return top 5
+  const prioritizedWords = words.filter(word =>
+    HOAX_KEYWORDS.some(keyword => word.includes(keyword)) ||
+    word.length > 4 // Longer words are more specific
+  );
+
+  return [...prioritizedWords, ...words.filter(word => !prioritizedWords.includes(word))].slice(0, 5);
 }
 
 export async function GET(request: NextRequest) {

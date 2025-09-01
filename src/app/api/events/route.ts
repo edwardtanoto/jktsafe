@@ -8,9 +8,6 @@ export async function GET(request: NextRequest) {
   const corsResponse = handleCors(request);
   if (corsResponse) return corsResponse;
 
-  // For GET requests, we'll allow public access but with rate limiting
-  console.log(`📊 Events API accessed from: ${request.headers.get('user-agent')?.substring(0, 50)}...`);
-
   // Apply rate limiting to public access
   const clientIp = request.headers.get('x-forwarded-for') || 
                    request.headers.get('x-real-ip') || 
@@ -36,7 +33,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type'); // 'protest', 'demonstration', etc.
     const verified = searchParams.get('verified'); // 'true', 'false', or null for all
-    const limit = parseInt(searchParams.get('limit') || '100');
+    // For admin/internal requests, don't limit. For public requests, default to 100
+    const limitParam = searchParams.get('limit');
+    const limit = limitParam ? parseInt(limitParam) : undefined; // undefined means no limit
     const hours = parseInt(searchParams.get('hours') || '0'); // 0 means no time filter
 
     const where: Record<string, unknown> = {};
