@@ -178,11 +178,11 @@ export default function ProtestMap() {
   // Function to create GeoJSON from events
   const createEventGeoJSON = (events: Event[]) => {
     return {
-      type: 'FeatureCollection',
+      type: 'FeatureCollection' as const,
       features: events.map(event => ({
-        type: 'Feature',
+        type: 'Feature' as const,
         geometry: {
-          type: 'Point',
+          type: 'Point' as const,
           coordinates: [event.lng, event.lat] // [lng, lat]
         },
         properties: {

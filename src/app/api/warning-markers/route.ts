@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
         { lat: { not: null } },
         { lng: { not: null } },
         { confidenceScore: { gte: minConfidence } }
-      ]
+      ] as Record<string, unknown>[]
     };
 
     // Add time filter if specified
