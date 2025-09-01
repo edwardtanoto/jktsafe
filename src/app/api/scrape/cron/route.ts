@@ -36,6 +36,10 @@ export async function GET(request: NextRequest) {
       : 'http://localhost:3000';
 
     console.log('🔗 Calling main scraping endpoint...');
+    console.log('📋 Request headers being sent:');
+    console.log(`  - x-internal-cron: true`);
+    console.log(`  - x-scrape-secret: ${scrapeSecret ? 'Configured' : 'Missing'}`);
+    console.log(`  - user-agent: vercel-cron/1.0`);
 
     // Call the main scraping endpoint with proper authentication
     let response: Response;

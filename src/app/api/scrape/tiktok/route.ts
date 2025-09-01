@@ -269,11 +269,19 @@ export async function GET(request: NextRequest) {
 
   // Check if this is a cron job request (internal call from /api/scrape/cron)
   const isInternalCronCall = request.headers.get('x-internal-cron') === 'true';
+  const scrapeSecret = request.headers.get('x-scrape-secret');
+
+  console.log('🔍 Authentication check:');
+  console.log(`  - x-internal-cron: ${isInternalCronCall}`);
+  console.log(`  - x-scrape-secret: ${scrapeSecret ? 'Present' : 'Missing'}`);
+  console.log(`  - Environment SCRAPE_SECRET: ${process.env.SCRAPE_SECRET ? 'Set' : 'Missing'}`);
 
   // Authenticate scrape request (skip for internal cron calls)
   if (!isInternalCronCall) {
+    console.log('🔐 External request - checking authentication...');
     const auth = authenticateScrapeRequest(request);
     if (!auth.isValid) {
+      console.log(`❌ Authentication failed: ${auth.error}`);
       return NextResponse.json(
         {
           success: false,
@@ -286,6 +294,9 @@ export async function GET(request: NextRequest) {
         }
       );
     }
+    console.log('✅ External request authenticated');
+  } else {
+    console.log('🔐 Internal cron call - skipping authentication');
   }
 
   console.log('🔐 Scrape request authenticated successfully');
