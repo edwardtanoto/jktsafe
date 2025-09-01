@@ -47,7 +47,6 @@ export default function ProtestMap() {
   const mapContainer = useRef<any>(null);
   const map = useRef<mapboxgl.Map | any>(null);
   const [scrapingStatus, setScrapingStatus] = useState<'idle' | 'scraping' | 'completed' | 'error'>('idle');
-  const [lastUpdate, setLastUpdate] = useState<string>('Never');
 
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,7 +69,7 @@ export default function ProtestMap() {
       // Fetch regular events, road closures, and warning markers with time filter
       const timeParam = activeTimeFilter > 0 ? `&hours=${activeTimeFilter}` : '';
       const [eventsResponse, roadClosuresResponse, warningMarkersResponse] = await Promise.all([
-        fetch(`/api/events?type=protest&limit=100${timeParam}`),
+        fetch(`/api/events?type=protest${timeParam}`),
         // For road closures: if activeTimeFilter is 0 (All), don't send hours param, otherwise send the activeTimeFilter value
         fetch(`/api/road-closures${activeTimeFilter > 0 ? `?hours=${activeTimeFilter}` : ''}`),
         // Fetch warning markers with minimum confidence threshold
@@ -135,7 +134,6 @@ export default function ProtestMap() {
         if (response.ok) {
           const data: any = await response.json();
           setScrapingStatus(data.status || 'idle');
-          setLastUpdate(data.lastUpdate || 'Never');
         }
       } catch (error) {
         // API might not exist yet, keep default status
@@ -728,13 +726,6 @@ export default function ProtestMap() {
                     return newEvents.slice(0, 200);
                   });
 
-                  // Update last update timestamp
-                  setLastUpdate(new Date().toLocaleTimeString('en-US', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                    second: '2-digit'
-                  }));
-
                   // Show notification for new updates
                   if (data.events?.length > 0 || data.warningMarkers?.length > 0) {
                     console.log('✅ Live update applied to map');
@@ -875,10 +866,11 @@ export default function ProtestMap() {
                     fontSize: '11px',
                     color: '#9ca3af'
                   }}>
-                    <p>Disclaimer: Reverify the map, I checked some isn't accurate.</p>
                   </span>
               </h1>
+              
             </>
+            
           )}
           
           {/* Events Count */}
@@ -922,12 +914,44 @@ export default function ProtestMap() {
                 return `${count} ${label}`;
               })()}
               </div>
+               {/* Status Information */}
+               <div style={{
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    marginBottom: '6px'
+                  }}>
+                    <div style={{
+                      width: '10px',
+                      height: '10px',
+                      borderRadius: '50%',
+                      backgroundColor: getStatusColor(),
+                      boxShadow: `0 0 10px ${getStatusColor()}`,
+                      animation: scrapingStatus === 'scraping' ? 'pulse 2s infinite' : 'none'
+                    }} />
+                    <span style={{
+                      fontSize: '12px',
+                      fontWeight: '500',
+                      color: '#ffffff'
+                    }}>
+                      {getStatusText()} - Updates every 1 hour
+                    </span>
+                  </div>
+                  <div style={{
+                    fontSize: '10px',
+                    color: '#9ca3af',
+                    lineHeight: '1.3'
+                  }}>
+                  </div>
+                </div>
               {!isMobile && (
                 <div style={{
                   fontSize: '11px',
                   color: '#9ca3af'
                 }}>
-                  {loading ? 'Loading events...' : error ? '❌ Error loading events' : 'Live from database'}
+                  {loading ? 'Loading events...' : error ? '❌ Error loading events' :  <div>Next update: {nextUpdateTime}</div>}
                 </div>
               )}
             </div>
@@ -1045,54 +1069,6 @@ export default function ProtestMap() {
                       boxShadow: '0 1px 3px rgba(251, 191, 36, 0.4)'
                     }}></div>
                     <span style={{ fontWeight: '500' }}>Warning</span>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{
-                      width: '12px',
-                      height: '12px',
-                      borderRadius: '50%',
-                      backgroundColor: '#3b82f6',
-                      boxShadow: '0 1px 3px rgba(59, 130, 246, 0.3)'
-                    }}></div>
-                    <span style={{ fontWeight: '500' }}>Other</span>
-                  </div>
-                </div>
-
-                {/* Status Information */}
-                <div style={{
-                  paddingTop: '8px',
-                  borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-                  marginTop: '8px'
-                }}>
-                  <div style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    marginBottom: '6px'
-                  }}>
-                    <div style={{
-                      width: '10px',
-                      height: '10px',
-                      borderRadius: '50%',
-                      backgroundColor: getStatusColor(),
-                      boxShadow: `0 0 10px ${getStatusColor()}`,
-                      animation: scrapingStatus === 'scraping' ? 'pulse 2s infinite' : 'none'
-                    }} />
-                    <span style={{
-                      fontSize: '12px',
-                      fontWeight: '500',
-                      color: '#ffffff'
-                    }}>
-                      {getStatusText()} - Updates every 1 hour
-                    </span>
-                  </div>
-                  <div style={{
-                    fontSize: '10px',
-                    color: '#9ca3af',
-                    lineHeight: '1.3'
-                  }}>
-                    <div>Last: {lastUpdate}</div>
-                    <div>Next: {nextUpdateTime}</div>
                   </div>
                 </div>
               </div>

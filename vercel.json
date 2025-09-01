@@ -8,6 +8,9 @@
     },
     "src/app/api/scrape/cron/route.ts": {
       "maxDuration": 900
+    },
+    "src/app/api/rss/fetch/route.ts": {
+      "maxDuration": 120
     }
   },
   "crons": [
@@ -20,6 +23,11 @@
       "path": "/api/scrape/cron",
       "schedule": "0 2,4,6,8,10 * * *",
       "comment": "Conserve hours: 2am-12pm (every 2 hours)"
+    },
+    {
+      "path": "/api/rss/fetch",
+      "schedule": "0 */2 * * *",
+      "comment": "Fetch TurnBackHoax RSS feed every 2 hours (cost-optimized)"
     }
   ],
   "env": {
