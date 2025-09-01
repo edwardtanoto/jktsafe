@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     console.log(`🔍 Fetching warning markers with filters: hours=${hours}, limit=${limit}, verified=${verified}, minConfidence=${minConfidence}`);
 
     // Build where clause
-    const whereClause: Record<string, unknown> = {
+    const whereClause = {
       AND: [
         { extractedLocation: { not: null } },
         { lat: { not: null } },

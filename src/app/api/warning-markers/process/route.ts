@@ -70,16 +70,15 @@ export async function POST(request: NextRequest) {
           try {
             const geocodeResult = await smartGeocodeLocation(String(locationToGeocode));
             
-            if (geocodeResult.success && geocodeResult.latitude && geocodeResult.longitude) {
-              updateData.lat = geocodeResult.latitude;
-              updateData.lng = geocodeResult.longitude;
+            if (geocodeResult.success && geocodeResult.lat && geocodeResult.lng) {
+              updateData.lat = geocodeResult.lat;
+              updateData.lng = geocodeResult.lng;
               needsUpdate = true;
-              console.log(`📍 Geocoded to: ${geocodeResult.latitude}, ${geocodeResult.longitude}`);
+              console.log(`📍 Geocoded to: ${geocodeResult.lat}, ${geocodeResult.lng}`);
               
-              // Update confidence based on geocoding quality
-              if (geocodeResult.confidenceScore) {
-                const currentConfidence = updateData.confidenceScore || marker.confidenceScore || 0.5;
-                updateData.confidenceScore = Math.min(currentConfidence, geocodeResult.confidenceScore);
+              // Set a default confidence score for geocoded locations
+              if (!marker.confidenceScore) {
+                updateData.confidenceScore = 0.7; // Default confidence for geocoded locations
               }
             } else {
               console.log(`❌ Geocoding failed: ${geocodeResult.error}`);
