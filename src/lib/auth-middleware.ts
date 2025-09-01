@@ -96,7 +96,7 @@ export function withAuth(handler: (request: NextRequest, ...args: unknown[]) => 
 // CORS headers for security
 export function getCorsHeaders() {
   const origin = process.env.NODE_ENV === 'production'
-    ? 'https://lacakdemo.vercel.app' // Default production domain
+    ? 'https://safe.100ai.id' // Your actual custom domain
     : 'http://localhost:3000';
 
   return {

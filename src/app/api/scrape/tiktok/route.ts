@@ -278,8 +278,6 @@ export async function GET(request: NextRequest) {
   console.log(`  - CRON_SECRET match: ${isVercelCronJob}`);
   console.log(`  - x-internal-cron: ${isInternalCronCall}`);
   console.log(`  - x-scrape-secret: ${scrapeSecret ? 'Present' : 'Missing'}`);
-  console.log(`  - Environment CRON_SECRET: ${process.env.CRON_SECRET ? 'Set' : 'Missing'}`);
-  console.log(`  - Environment SCRAPE_SECRET: ${process.env.SCRAPE_SECRET ? 'Set' : 'Missing'}`);
 
   // Allow Vercel cron jobs with CRON_SECRET
   if (isVercelCronJob) {

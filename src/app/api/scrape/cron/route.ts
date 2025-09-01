@@ -30,9 +30,11 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get the base URL for internal API calls - use request origin for reliability
-    const baseUrl = request.nextUrl.origin || 
-                   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    // Get the base URL for internal API calls - hardcode for cron jobs since Vercel serverless 
+    // runs on internal infrastructure with different domain routing
+    const baseUrl = process.env.NODE_ENV === 'production' 
+      ? 'https://safe.100ai.id'  // Your actual custom domain
+      : 'http://localhost:3000';
 
     console.log('🔗 Calling main scraping endpoint...');
     console.log(`📍 Target URL: ${baseUrl}/api/scrape/tiktok`);
@@ -50,7 +52,8 @@ export async function GET(request: NextRequest) {
         headers: {
           'x-internal-cron': 'true', // Mark this as an internal cron call
           'x-scrape-secret': scrapeSecret, // Provide authentication
-          'user-agent': 'vercel-cron/1.0' // Identify as cron job
+          'user-agent': 'vercel-cron/1.0', // Identify as cron job
+          'x-vercel-protection-bypass': process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '', // Bypass deployment protection
         },
         // Increase timeout for scraping operations and avoid caching
         cache: 'no-store',
