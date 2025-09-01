@@ -380,21 +380,22 @@ export default function ProtestMap() {
 
       // Add click event for clusters
       map.current.on('click', 'clusters', (e: any) => {
+        if (!map.current) return;
         const features = map.current.queryRenderedFeatures(e.point, {
           layers: ['clusters']
         });
 
-        if (features.length > 0) {
+        if (features.length > 0 && features[0].properties) {
           const clusterId = features[0].properties.cluster_id;
           const pointCount = features[0].properties.point_count;
           const clusterSource = (map.current.getSource('events') as any);
 
           // Get cluster expansion zoom
           clusterSource.getClusterExpansionZoom(clusterId, (err: any, zoom: number) => {
-            if (err) return;
+            if (err || !map.current) return;
 
             map.current.easeTo({
-              center: features[0].geometry.coordinates,
+              center: (features[0].geometry as any).coordinates,
               zoom: zoom
             });
           });
@@ -403,6 +404,7 @@ export default function ProtestMap() {
 
       // Add click events for individual events
       ['protest-circles', 'road-closure-circles', 'warning-circles', 'event-emoji'].forEach(layerId => {
+        if (!map.current) return;
         map.current.on('click', layerId, (e: any) => {
           const feature = e.features[0];
           const coordinates = feature.geometry.coordinates.slice();
@@ -583,35 +585,46 @@ export default function ProtestMap() {
           
           const popup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true })
             .setLngLat(coordinates)
-            .setHTML(popupHTML)
-            .addTo(map.current);
-
-          // Fly to location
-          map.current.flyTo({
-            center: coordinates,
-            zoom: 15,
-            speed: 1.2,
-            curve: 1,
-            easing: (t: number) => t,
-            essential: true
-          });
+            .setHTML(popupHTML);
+            
+          if (map.current) {
+            popup.addTo(map.current);
+            
+            // Fly to location
+            map.current.flyTo({
+              center: coordinates,
+              zoom: 15,
+              speed: 1.2,
+              curve: 1,
+              easing: (t: number) => t,
+              essential: true
+            });
+          }
         });
 
         // Add cursor pointer for interactive pins
         map.current.on('mouseenter', layerId, () => {
-          map.current.getCanvas().style.cursor = 'pointer';
+          if (map.current) {
+            map.current.getCanvas().style.cursor = 'pointer';
+          }
         });
         map.current.on('mouseleave', layerId, () => {
-          map.current.getCanvas().style.cursor = '';
+          if (map.current) {
+            map.current.getCanvas().style.cursor = '';
+          }
         });
       });
 
       // Add cursor pointer for clusters
       map.current.on('mouseenter', 'clusters', () => {
-        map.current.getCanvas().style.cursor = 'pointer';
+        if (map.current) {
+          map.current.getCanvas().style.cursor = 'pointer';
+        }
       });
       map.current.on('mouseleave', 'clusters', () => {
-        map.current.getCanvas().style.cursor = '';
+        if (map.current) {
+          map.current.getCanvas().style.cursor = '';
+        }
       });
     }
   };
