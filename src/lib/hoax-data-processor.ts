@@ -6,7 +6,7 @@ import type { HoaxFactCheck } from './hoax-content-parser';
 
 interface ProcessingResult {
   success: boolean;
-  hoaxId?: string;
+  hoaxId?: string | number;
   error?: string;
   embeddingGenerated: boolean;
 }
@@ -42,7 +42,7 @@ export class HoaxDataProcessor {
         console.log(`Hoax ${hoaxData.guid} already processed`);
         return {
           success: true,
-          hoaxId: (cached as Record<string, unknown>).id as number,
+          hoaxId: (cached as Record<string, unknown>).id as string | number,
           embeddingGenerated: true
         };
       }
@@ -69,7 +69,7 @@ export class HoaxDataProcessor {
             sourceUrl: hoaxData.sourceUrl,
             publicationDate: hoaxData.publicationDate,
             contentHash: hoaxData.contentHash,
-            embedding: embedding,
+            embedding: embedding ? JSON.stringify(embedding) : undefined,
             updatedAt: new Date()
           },
           create: {
@@ -83,7 +83,7 @@ export class HoaxDataProcessor {
             sourceUrl: hoaxData.sourceUrl,
             publicationDate: hoaxData.publicationDate,
             contentHash: hoaxData.contentHash,
-            embedding: embedding
+            embedding: embedding ? JSON.stringify(embedding) : undefined
           }
         });
 
@@ -161,7 +161,7 @@ export class HoaxDataProcessor {
       const today = new Date().toISOString().split('T')[0];
       const dailyKey = `embeddings:daily:${today}`;
 
-      const dailyCount = await this.redis.get(dailyKey);
+      const dailyCount = await this.redis.get(dailyKey) as string | null;
       const count = parseInt(dailyCount || '0');
 
       // Limit to 100 embeddings per day (adjust based on your needs/costs)
@@ -271,7 +271,7 @@ export class HoaxDataProcessor {
       // Calculate similarity scores using dot product
       const results = hoaxesWithEmbeddings.map(hoax => {
         try {
-          const hoaxEmbedding = JSON.parse(hoax.embedding!);
+          const hoaxEmbedding = JSON.parse(hoax.embedding! as string);
           if (!Array.isArray(hoaxEmbedding) || hoaxEmbedding.length !== queryEmbedding.length) {
             return null;
           }
@@ -327,7 +327,7 @@ export class HoaxDataProcessor {
   // Keyword-based search (complements vector search)
   async searchByKeywords(keywords: string[], category?: string, limit: number = 10): Promise<PrismaHoaxFactCheck[]> {
     try {
-      const searchConditions = {
+      const searchConditions: any = {
         AND: [
           { isActive: true },
           {
@@ -340,7 +340,7 @@ export class HoaxDataProcessor {
             }))
           }
         ]
-      } as Record<string, unknown>;
+      };
 
       if (category) {
         searchConditions.AND.push({ hoaxCategory: category });
@@ -424,7 +424,7 @@ export class HoaxDataProcessor {
         this.prisma.hoaxFactCheck.count({
           where: {
             isActive: true,
-            embedding: { not: null }
+            embedding: { not: 'null' }
           }
         })
       ]);
