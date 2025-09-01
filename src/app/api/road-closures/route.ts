@@ -12,28 +12,23 @@ async function googlePlacesAutocomplete(query: string) {
     throw new Error('Google Maps API key not configured. Please set NEXT_PUBLIC_GOOGLE_MAPS_API_KEY in your .env.local file');
   }
 
-  // Try multiple search strategies for better Indonesian address coverage
+  // Simple search strategy that matches Google Maps behavior
   const searchStrategies = [
-    // Strategy 1: Flexible search with Indonesian focus
+    // Strategy 1: Basic search (same as Google Maps default)
     {
       input: query,
-      components: 'country:id',
-      language: 'id',
-      types: '(regions)(establishment)(geocode)',
-      strictbounds: 'false'
+      language: 'id'
     },
-    // Strategy 2: More permissive search without strict country bounds
+    // Strategy 2: With country restriction if basic fails
     {
       input: query,
       language: 'id',
-      types: '(regions)(establishment)(geocode)(address)',
-      strictbounds: 'false'
+      components: 'country:id'
     },
-    // Strategy 3: Even more permissive for abbreviations
+    // Strategy 3: Enhanced with Indonesia context if still no results
     {
-      input: query,
-      language: 'id,en',
-      strictbounds: 'false'
+      input: `${query} indonesia`,
+      language: 'id'
     }
   ];
 
@@ -60,13 +55,14 @@ async function googlePlacesAutocomplete(query: string) {
 
       if (data.status === 'OK' && data.predictions && data.predictions.length > 0) {
         console.log(`✅ Found ${data.predictions.length} results with strategy: ${JSON.stringify(strategy)}`);
+        console.log(`📍 First result: ${data.predictions[0]?.description}`);
         return data;
       }
 
-      console.log(`⚠️ Strategy returned: ${data.status} - ${data.error_message || 'No results'}`);
+      console.log(`⚠️ Strategy returned: ${data.status} - ${data.error_message || 'No results'} for query "${strategy.input}"`);
 
     } catch (error) {
-      console.warn(`Strategy failed:`, error);
+      console.warn(`Strategy failed for "${strategy.input}":`, error);
       continue;
     }
   }

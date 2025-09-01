@@ -9,6 +9,79 @@ import {
 } from './geocoding-cache';
 
 /**
+ * Google Maps Geocoding API result interface
+ */
+export interface GoogleMapsGeocodeResult {
+  success: boolean;
+  lat?: number;
+  lng?: number;
+  formatted_address?: string;
+  error?: string;
+}
+
+/**
+ * Geocode location using Google Maps Geocoding API
+ */
+async function geocodeWithGoogleMaps(location: string): Promise<GoogleMapsGeocodeResult> {
+  try {
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
+    
+    if (!apiKey) {
+      return {
+        success: false,
+        error: 'Google Maps API key not configured'
+      };
+    }
+
+    // Use Google Geocoding API with Indonesian bias
+    const params = new URLSearchParams({
+      address: location,
+      key: apiKey,
+      language: 'id',
+      region: 'id' // Bias towards Indonesia
+    });
+
+    const response = await fetch(
+      `https://maps.googleapis.com/maps/api/geocode/json?${params.toString()}`
+    );
+
+    if (!response.ok) {
+      throw new Error(`Google Geocoding API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.status === 'OK' && data.results && data.results.length > 0) {
+      const result = data.results[0];
+      const location = result.geometry.location;
+      
+      return {
+        success: true,
+        lat: location.lat,
+        lng: location.lng,
+        formatted_address: result.formatted_address
+      };
+    } else if (data.status === 'ZERO_RESULTS') {
+      return {
+        success: false,
+        error: 'No results found'
+      };
+    } else {
+      return {
+        success: false,
+        error: data.error_message || `Google Geocoding failed with status: ${data.status}`
+      };
+    }
+
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown Google Geocoding error'
+    };
+  }
+}
+
+/**
  * Smart geocoding function that uses cache-first approach
  * Falls back to API calls only when cache misses occur
  */
@@ -29,33 +102,39 @@ export async function smartGeocodeLocation(location: string): Promise<UnifiedGeo
     // Step 2: Apply rate limiting before API calls
     await globalRateLimiter.waitForNextCall();
 
-    // Step 3: Try geocoding with both services concurrently
-    console.log(`🌐 Geocoding concurrently with SERP: "${location}"`);
+    // Step 3: Try SERP first, then Google Maps as fallback
+    console.log(`🌐 Trying SERP geocoding for: "${location}"`);
+    const serpResult = await geocodeWithSerp(location);
 
-    const [serpResult] = await Promise.allSettled([
-      geocodeWithSerp(location)
-    ]);
-
-    // Step 4: Use best available result
     let result: UnifiedGeocodeResult;
-    let source: 'serp';
+    let source: 'serp' | 'google';
 
-    if (serpResult.status === 'fulfilled' && serpResult.value.success) {
-      result = convertSerpToUnified(serpResult.value);
+    if (serpResult.success) {
+      result = convertSerpToUnified(serpResult);
       source = 'serp';
       console.log(`✅ SERP geocoding successful for: "${location}"`);
     } else {
-      // Both services failed
-      const serpError = serpResult.status === 'rejected' ? serpResult.reason :
-                       serpResult.status === 'fulfilled' ? serpResult.value.error : 'Unknown error';
+      console.log(`❌ SERP failed for "${location}": ${serpResult.error}`);
+      console.log(`🗺️ Trying Google Maps geocoding as fallback...`);
+      
+      // Fallback to Google Maps
+      const googleResult = await geocodeWithGoogleMaps(location);
+      
+      if (googleResult.success) {
+        result = convertGoogleMapsToUnified(googleResult);
+        source = 'google';
+        console.log(`✅ Google Maps geocoding successful for: "${location}"`);
+      } else {
+        console.log(`❌ All geocoding attempts failed for: "${location}"`);
+        console.log(`   SERP error: ${serpResult.error}`);
+        console.log(`   Google Maps error: ${googleResult.error}`);
 
-      console.log(`❌ All geocoding attempts failed for: "${location}"`);
-      console.log(`   SERP error: ${serpError}`);
-
-      result = {
-        success: false,
-      };
-      source = 'serp'; // Default fallback
+        result = {
+          success: false,
+          error: `SERP: ${serpResult.error}; Google Maps: ${googleResult.error}`
+        };
+        source = 'serp'; // Default fallback
+      }
     }
 
     // Step 5: Cache successful results for future use
@@ -84,6 +163,20 @@ function convertSerpToUnified(serpResult: SerpGeocodeResult): UnifiedGeocodeResu
     lng: serpResult.lng,
     formattedAddress: serpResult.formatted_address,
     source: 'serp',
+    cached: false
+  };
+}
+
+/**
+ * Convert Google Maps geocoding result to unified format
+ */
+function convertGoogleMapsToUnified(googleResult: GoogleMapsGeocodeResult): UnifiedGeocodeResult {
+  return {
+    success: googleResult.success,
+    lat: googleResult.lat,
+    lng: googleResult.lng,
+    formattedAddress: googleResult.formatted_address,
+    source: 'google',
     cached: false
   };
 }

@@ -66,6 +66,7 @@ export async function GET(request: NextRequest) {
         url: true,
         verified: true,
         type: true,
+        originalCreatedAt: true,
         createdAt: true
       }
     });

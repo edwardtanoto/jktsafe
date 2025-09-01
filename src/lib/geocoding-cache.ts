@@ -66,7 +66,14 @@ export async function getCachedGeocode(location: string): Promise<CachedGeocodeR
       return null;
     }
 
-    if (!isCacheValid(cachedEntry)) {
+    // Convert null to undefined for optional fields to match interface
+    const typedEntry: CachedGeocodeResult = {
+      ...cachedEntry,
+      formattedAddress: cachedEntry.formattedAddress || undefined,
+      confidenceScore: cachedEntry.confidenceScore || undefined
+    };
+
+    if (!isCacheValid(typedEntry)) {
       // Remove invalid cache entry
       await prisma.geocodeCache.delete({
         where: { id: cachedEntry.id }
@@ -74,7 +81,7 @@ export async function getCachedGeocode(location: string): Promise<CachedGeocodeR
       return null;
     }
 
-    return cachedEntry;
+    return typedEntry;
   } catch (error) {
     console.error('Error checking geocoding cache:', error);
     return null;
@@ -87,7 +94,7 @@ export async function getCachedGeocode(location: string): Promise<CachedGeocodeR
 export async function storeGeocodeInCache(
   location: string,
   result: UnifiedGeocodeResult,
-  source: 'serp' | 'mapbox'
+  source: 'serp' | 'mapbox' | 'google'
 ): Promise<void> {
   if (!result.success || !result.lat || !result.lng) {
     console.log(`⚠️ Not caching failed geocoding result for: ${location}`);
@@ -125,6 +132,12 @@ export async function storeGeocodeInCache(
 
     console.log(`💾 Cached geocoding result for: "${location}" (${source})`);
   } catch (error) {
+    // Handle unique constraint violations gracefully
+    if (error instanceof Error && error.message.includes('Unique constraint')) {
+      console.log(`⚠️ Location already cached during concurrent processing: "${location}"`);
+      // This is not an error - another process already cached this location
+      return;
+    }
     console.error('Error storing geocoding result in cache:', error);
   }
 }

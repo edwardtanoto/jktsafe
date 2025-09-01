@@ -134,21 +134,47 @@ async function processTikTokVideo(video: Video): Promise<boolean> {
     // Generate Google Maps URL for coordinates verification
     const googleMapsUrl = `https://www.google.com/maps?q=${geocodeResult.lat},${geocodeResult.lng}`;
 
-    // Create event in database
-    await prisma.event.create({
-      data: {
-        title: `Demo Activity - ${video.author.nickname}`,
-        description: video.title,
-        lat: geocodeResult.lat!,
-        lng: geocodeResult.lng!,
-        source: 'TikTok',
-        url: tiktokUrl,
-        verified: false,
-        type: 'riot',
-        extractedLocation: locationResult.exact_location,
-        googleMapsUrl: googleMapsUrl
+    // Convert TikTok create_time (Unix timestamp) to Date
+    const originalCreatedAt = new Date(video.create_time * 1000);
+    
+    // Create or update event in database using upsert to prevent duplicates
+    try {
+      await prisma.event.upsert({
+        where: {
+          url: tiktokUrl
+        },
+        update: {
+          title: `Demo Activity - ${video.author.nickname}`,
+          description: video.title,
+          lat: geocodeResult.lat!,
+          lng: geocodeResult.lng!,
+          verified: false,
+          extractedLocation: locationResult.exact_location,
+          googleMapsUrl: googleMapsUrl,
+          originalCreatedAt: originalCreatedAt,
+          updatedAt: new Date()
+        },
+        create: {
+          title: `Demo Activity - ${video.author.nickname}`,
+          description: video.title,
+          lat: geocodeResult.lat!,
+          lng: geocodeResult.lng!,
+          source: 'TikTok',
+          url: tiktokUrl,
+          verified: false,
+          type: 'riot',
+          extractedLocation: locationResult.exact_location,
+          googleMapsUrl: googleMapsUrl,
+          originalCreatedAt: originalCreatedAt
+        }
+      });
+    } catch (dbError) {
+      if (dbError instanceof Error && dbError.message.includes('Unique constraint')) {
+        console.log(`⚠️ Event already exists for URL: ${tiktokUrl} - skipping`);
+        return false; // Don't count as processed since it already existed
       }
-    });
+      throw dbError; // Re-throw other database errors
+    }
 
     const processingTime = Date.now() - startTime;
     console.log(`✅ Successfully processed TikTok video: ${video.video_id}`);

@@ -42,6 +42,10 @@ interface EventData {
   createdAt: Date;
   verified: boolean;
   source: string;
+  url?: string;
+  confidenceScore?: number;
+  views?: string | number;
+  retweets?: number;
 }
 
 export async function POST(request: NextRequest) {
@@ -137,16 +141,64 @@ async function getSimilarEvents(queryEmbedding: number[]): Promise<EventData[]> 
       }
     });
 
-    // Combine and deduplicate results
-    const allEvents = [...similarEvents, ...recentEvents];
+    // Get warning markers (demonstration alerts from Twitter)
+    const warningMarkers = await prisma.warningMarker.findMany({
+      where: {
+        AND: [
+          { extractedLocation: { not: null } },
+          { lat: { not: null } },
+          { lng: { not: null } },
+          { confidenceScore: { gte: 0.3 } },
+          { createdAt: { gte: new Date(Date.now() - 6 * 60 * 60 * 1000) } } // 6 hours ago
+        ]
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      select: {
+        id: true,
+        text: true,
+        extractedLocation: true,
+        lat: true,
+        lng: true,
+        confidenceScore: true,
+        verified: true,
+        createdAt: true,
+        tweetId: true,
+        userInfo: true,
+        views: true,
+        retweets: true
+      }
+    });
+
+    // Transform warning markers to match EventData format
+    const transformedWarnings = warningMarkers.map((marker: any) => ({
+      id: marker.id,
+      title: `⚠️ Demo Alert: ${marker.extractedLocation}`,
+      description: marker.text.length > 200 ? marker.text.substring(0, 200) + '...' : marker.text,
+      lat: marker.lat!,
+      lng: marker.lng!,
+      type: 'warning',
+      extractedLocation: marker.extractedLocation,
+      createdAt: marker.createdAt,
+      verified: marker.verified,
+      source: 'twitter',
+      url: `https://twitter.com/i/status/${marker.tweetId}`,
+      confidenceScore: marker.confidenceScore,
+      views: marker.views,
+      retweets: marker.retweets
+    }));
+
+    // Combine all results
+    const allEvents = [...(similarEvents as any[]), ...recentEvents, ...transformedWarnings];
     const seenIds = new Set();
     const uniqueEvents = allEvents.filter(event => {
-      if (seenIds.has(event.id)) return false;
-      seenIds.add(event.id);
+      const uniqueKey = `${event.type}-${event.id}`;
+      if (seenIds.has(uniqueKey)) return false;
+      seenIds.add(uniqueKey);
       return true;
     });
 
-    return uniqueEvents.slice(0, 20);
+    return uniqueEvents.slice(0, 25);
   } catch (error) {
     console.error('Error fetching similar events:', error);
     // Fallback to recent events if vector search fails
@@ -169,7 +221,7 @@ async function getRecentEventsFallback(): Promise<EventData[]> {
       orderBy: {
         createdAt: 'desc'
       },
-      take: 20,
+      take: 15,
       select: {
         id: true,
         title: true,
@@ -185,7 +237,59 @@ async function getRecentEventsFallback(): Promise<EventData[]> {
       }
     });
 
-    return events;
+    // Also get warning markers as fallback
+    const warningMarkers = await prisma.warningMarker.findMany({
+      where: {
+        AND: [
+          { extractedLocation: { not: null } },
+          { lat: { not: null } },
+          { lng: { not: null } },
+          { confidenceScore: { gte: 0.3 } },
+          { createdAt: { gte: new Date(Date.now() - 6 * 60 * 60 * 1000) } } // 6 hours ago
+        ]
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+      select: {
+        id: true,
+        text: true,
+        extractedLocation: true,
+        lat: true,
+        lng: true,
+        confidenceScore: true,
+        verified: true,
+        createdAt: true,
+        tweetId: true,
+        userInfo: true,
+        views: true,
+        retweets: true
+      }
+    });
+
+    // Transform warning markers to match EventData format
+    const transformedWarnings = warningMarkers.map((marker: any) => ({
+      id: marker.id,
+      title: `⚠️ Demo Alert: ${marker.extractedLocation}`,
+      description: marker.text.length > 200 ? marker.text.substring(0, 200) + '...' : marker.text,
+      lat: marker.lat!,
+      lng: marker.lng!,
+      type: 'warning',
+      extractedLocation: marker.extractedLocation,
+      createdAt: marker.createdAt,
+      verified: marker.verified,
+      source: 'twitter',
+      url: `https://twitter.com/i/status/${marker.tweetId}`,
+      confidenceScore: marker.confidenceScore,
+      views: marker.views,
+      retweets: marker.retweets
+    }));
+
+    // Fix type compatibility
+    const compatibleEvents = events.map(event => ({
+      ...event,
+      url: event.url || undefined
+    }));
+    return [...compatibleEvents, ...transformedWarnings];
   } catch (error) {
     console.error('Error fetching recent events fallback:', error);
     return [];
@@ -195,17 +299,35 @@ async function getRecentEventsFallback(): Promise<EventData[]> {
 async function generateChatResponse(message: string, events: EventData[], context: any) {
   try {
     // Format events data for LLM context
-    const eventsContext = events.map(event => ({
-      location: event.extractedLocation || `${event.lat.toFixed(4)}, ${event.lng.toFixed(4)}`,
-      type: event.type,
-      title: event.title,
-      description: event.description,
-      time: formatTimeAgo(event.createdAt),
-      verified: event.verified,
-      source: event.source,
-      tiktokUrl: event.url || 'Tidak tersedia',
-      markdownLink: event.url ? `[TikTok](${event.url})` : 'Tidak ada link tersedia'
-    }));
+    const eventsContext = events.map(event => {
+      const baseInfo = {
+        location: event.extractedLocation || `${event.lat.toFixed(4)}, ${event.lng.toFixed(4)}`,
+        type: event.type,
+        title: event.title,
+        description: event.description,
+        time: formatTimeAgo(event.createdAt),
+        verified: event.verified,
+        source: event.source,
+        url: event.url || 'Tidak tersedia'
+      };
+
+      // Add specific information for warning markers
+      if (event.type === 'warning') {
+        return {
+          ...baseInfo,
+          confidenceScore: `${Math.round(((event as any).confidenceScore || 0) * 100)}%`,
+          views: (event as any).views || 0,
+          retweets: (event as any).retweets || 0,
+          markdownLink: event.url ? `[Twitter](${event.url})` : 'Tidak ada link tersedia',
+          alertType: 'Peringatan Demonstrasi'
+        };
+      } else {
+        return {
+          ...baseInfo,
+          markdownLink: event.url ? `[TikTok](${event.url})` : 'Tidak ada link tersedia'
+        };
+      }
+    });
 
     const systemPrompt = `Kamu adalah asisten informasi keamanan untuk Safe Indonesia.
 Bantu pengguna dengan pertanyaan tentang demonstrasi, kerusuhan, dan situasi keamanan di Indonesia.
@@ -213,7 +335,18 @@ Bantu pengguna dengan pertanyaan tentang demonstrasi, kerusuhan, dan situasi kea
 INFORMASI TERBARU DARI DATABASE (${events.length} kejadian dalam 6 jam terakhir):
 ${JSON.stringify(eventsContext, null, 2)}
 
-PETUNJUK:
+JENIS DATA YANG TERSEDIA:
+1. WARNING MARKERS (type: "warning"): Peringatan demonstrasi dari Twitter dengan confidence score
+2. EVENTS (type: "riot", "protest", "demonstration"): Kejadian dari TikTok dan sumber lain
+
+PETUNJUK KHUSUS UNTUK PERTANYAAN DEMONSTRASI:
+- Ketika ditanya "ada rencana demo dimana" atau pertanyaan serupa, prioritaskan WARNING MARKERS
+- Warning markers memberikan informasi paling akurat tentang rencana demonstrasi
+- Sertakan confidence score untuk warning markers
+- Sebutkan jumlah views dan retweets untuk menunjukkan tingkat perhatian publik
+- Berikan informasi lokasi yang spesifik
+
+PETUNJUK UMUM:
 - Jawab dalam bahasa Indonesia yang natural dan mudah dipahami
 - Fokus pada informasi lokasi, waktu, dan jenis kejadian
 - Sertakan status verifikasi jika relevan
@@ -221,14 +354,15 @@ PETUNJUK:
 - Jika tidak ada data terkini, katakan dengan jujur
 - Jangan berikan informasi yang tidak akurat atau spekulatif
 - Jika pertanyaan tidak terkait keamanan, arahkan kembali ke topik utama
-- SELALU sertakan link TikTok jika tersedia untuk setiap kejadian
+- SELALU sertakan link (Twitter/TikTok) jika tersedia untuk setiap kejadian
 
 FORMAT JAWABAN:
-- Gunakan emoji yang relevan (📍 untuk lokasi, ⏰ untuk waktu, ✅ untuk terverifikasi, 🔗 untuk link)
+- Gunakan emoji yang relevan (📍 untuk lokasi, ⏰ untuk waktu, ✅ untuk terverifikasi, ⚠️ untuk warning, 🔗 untuk link)
 - Kelompokkan informasi berdasarkan lokasi jika memungkinkan
 - Berikan konteks waktu yang jelas ("2 jam lalu", "kemarin", dll)
-- FORMAT LINK TIKTOK: Gunakan field markdownLink yang sudah tersedia dalam data
-- Contoh format yang benar: 🔗 [TikTok](https://www.tiktok.com/@user/video/123456789)
+- Untuk warning markers: sertakan confidence score dan engagement metrics
+- FORMAT LINK: Gunakan field markdownLink yang sudah tersedia dalam data
+- Contoh format yang benar: 🔗 [Twitter](https://twitter.com/i/status/123) atau [TikTok](https://tiktok.com/@user/video/123)
 - Field markdownLink sudah berisi format yang tepat untuk hyperlink
 - Jika tidak ada link, akan muncul "Tidak ada link tersedia"`;
 

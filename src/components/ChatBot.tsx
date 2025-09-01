@@ -30,8 +30,21 @@ export default function ChatBot() {
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Mobile detection
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -147,8 +160,8 @@ export default function ChatBot() {
       <div
         style={{
           position: 'fixed',
-          bottom: '30px',
-          right: '30px',
+          bottom: '20px',
+          left: '20px',
           zIndex: 1000,
           fontFamily: '"IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
         }}
@@ -190,9 +203,9 @@ export default function ChatBot() {
           style={{
             position: 'fixed',
             bottom: '100px',
-            right: '30px',
-            width: '350px',
-            height: '500px',
+            left: '20px',
+            width: isMobile ? '300px' : '420px',
+            height: isMobile ? '500px' : '400px',
             backgroundColor: 'rgba(0, 0, 0, 0.9)',
             backdropFilter: 'blur(15px)',
             border: '1px solid rgba(255, 255, 255, 0.1)',
@@ -208,17 +221,41 @@ export default function ChatBot() {
           {/* Header */}
           <div
             style={{
-              padding: '16px 20px',
+              padding: isMobile ? '12px 16px' : '16px 20px',
               borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
               backgroundColor: 'rgba(255, 255, 255, 0.05)'
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <span style={{ fontSize: '18px' }}>🤖</span>
+            {isMobile && (
+              <div style={{
+                textAlign: 'center',
+                marginBottom: '12px',
+                paddingBottom: '8px',
+                borderBottom: '1px solid rgba(255, 255, 255, 0.1)'
+              }}>
+                <h2 style={{
+                  margin: '0',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  color: '#ffffff'
+                }}>
+                  Safe Indonesia Chat
+                </h2>
+                <p style={{
+                  margin: '4px 0 0 0',
+                  fontSize: '10px',
+                  color: '#9ca3af'
+                }}>
+                  Tanyakan tentang situasi keamanan terkini
+                </p>
+              </div>
+            )}
+            <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '10px' }}>
+              <span style={{ fontSize: isMobile ? '16px' : '18px' }}>🤖</span>
               <div>
                 <h3 style={{
                   margin: '0 0 2px 0',
-                  fontSize: '16px',
+                  fontSize: isMobile ? '14px' : '16px',
                   fontWeight: '600',
                   color: '#ffffff'
                 }}>
@@ -226,7 +263,7 @@ export default function ChatBot() {
                 </h3>
                 <p style={{
                   margin: '0',
-                  fontSize: '12px',
+                  fontSize: isMobile ? '10px' : '12px',
                   color: '#9ca3af'
                 }}>
                   Asisten Keamanan
@@ -240,10 +277,10 @@ export default function ChatBot() {
             style={{
               flex: 1,
               overflowY: 'auto',
-              padding: '16px',
+              padding: isMobile ? '12px' : '16px',
               display: 'flex',
               flexDirection: 'column',
-              gap: '12px'
+              gap: isMobile ? '8px' : '12px'
             }}
           >
             {messages.map((message) => (
@@ -259,13 +296,13 @@ export default function ChatBot() {
                 <div
                   style={{
                     maxWidth: '80%',
-                    padding: '12px 16px',
-                    borderRadius: '16px',
+                    padding: isMobile ? '8px 12px' : '12px 16px',
+                    borderRadius: isMobile ? '12px' : '16px',
                     backgroundColor: message.sender === 'user'
                       ? 'rgba(59, 130, 246, 0.8)'
                       : 'rgba(255, 255, 255, 0.1)',
                     color: '#ffffff',
-                    fontSize: '14px',
+                    fontSize: isMobile ? '12px' : '14px',
                     lineHeight: '1.4',
                     wordWrap: 'break-word',
                     whiteSpace: 'pre-wrap'
@@ -275,15 +312,56 @@ export default function ChatBot() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       <div
                         style={{
-                          width: '16px',
-                          height: '16px',
-                          border: '2px solid rgba(255, 255, 255, 0.3)',
-                          borderTop: '2px solid #ffffff',
+                          width: isMobile ? '20px' : '24px',
+                          height: isMobile ? '20px' : '24px',
+                          border: '2px solid rgba(255, 255, 255, 0.2)',
+                          borderTop: '2px solid #10b981',
+                          borderRight: '2px solid #10b981',
                           borderRadius: '50%',
-                          animation: 'spin 1s linear infinite'
+                          animation: 'spinGlow 1.2s linear infinite',
+                          boxShadow: '0 0 10px rgba(16, 185, 129, 0.5)'
                         }}
                       />
-                      {message.text}
+                      <div
+                        style={{
+                          display: 'flex',
+                          gap: '4px',
+                          alignItems: 'center'
+                        }}
+                      >
+                        <span style={{ animation: 'pulse 1.5s ease-in-out infinite' }}>
+                          {message.text}
+                        </span>
+                        <div style={{ display: 'flex', gap: '2px' }}>
+                          <div
+                            style={{
+                              width: '4px',
+                              height: '4px',
+                              backgroundColor: '#10b981',
+                              borderRadius: '50%',
+                              animation: 'bounce 1.4s ease-in-out infinite'
+                            }}
+                          />
+                          <div
+                            style={{
+                              width: '4px',
+                              height: '4px',
+                              backgroundColor: '#10b981',
+                              borderRadius: '50%',
+                              animation: 'bounce 1.4s ease-in-out infinite 0.2s'
+                            }}
+                          />
+                          <div
+                            style={{
+                              width: '4px',
+                              height: '4px',
+                              backgroundColor: '#10b981',
+                              borderRadius: '50%',
+                              animation: 'bounce 1.4s ease-in-out infinite 0.4s'
+                            }}
+                          />
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     message.sender === 'bot' ? (
@@ -318,9 +396,11 @@ export default function ChatBot() {
                 </div>
                 <span
                   style={{
-                    fontSize: '10px',
+                    fontSize: isMobile ? '8px' : '10px',
                     color: '#9ca3af',
-                    padding: message.sender === 'user' ? '0 16px 0 0' : '0 0 0 16px'
+                    padding: message.sender === 'user' ? 
+                      (isMobile ? '0 12px 0 0' : '0 16px 0 0') : 
+                      (isMobile ? '0 0 0 12px' : '0 0 0 16px')
                   }}
                 >
                   {formatTime(message.timestamp)}
@@ -333,28 +413,28 @@ export default function ChatBot() {
           {/* Input */}
           <div
             style={{
-              padding: '16px',
+              padding: isMobile ? '12px' : '16px',
               borderTop: '1px solid rgba(255, 255, 255, 0.1)',
               backgroundColor: 'rgba(255, 255, 255, 0.05)'
             }}
           >
-            <div style={{ display: 'flex', gap: '8px' }}>
+            <div style={{ display: 'flex', gap: isMobile ? '6px' : '8px' }}>
               <input
                 ref={inputRef}
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyPress={handleKeyPress}
-                placeholder="Tanyakan tentang situasi keamanan..."
+                placeholder={isMobile ? "Tanyakan situasi keamanan..." : "Tanyakan tentang situasi keamanan..."}
                 disabled={isLoading}
                 style={{
                   flex: 1,
-                  padding: '12px 16px',
-                  borderRadius: '24px',
+                  padding: isMobile ? '10px 14px' : '12px 16px',
+                  borderRadius: isMobile ? '20px' : '24px',
                   border: '1px solid rgba(255, 255, 255, 0.2)',
                   backgroundColor: 'rgba(255, 255, 255, 0.1)',
                   color: '#ffffff',
-                  fontSize: '14px',
+                  fontSize: isMobile ? '12px' : '14px',
                   outline: 'none',
                   fontFamily: 'inherit'
                 }}
@@ -363,21 +443,33 @@ export default function ChatBot() {
                 onClick={handleSendMessage}
                 disabled={!inputValue.trim() || isLoading}
                 style={{
-                  width: '44px',
-                  height: '44px',
+                  width: isMobile ? '36px' : '44px',
+                  height: isMobile ? '36px' : '44px',
                   borderRadius: '50%',
                   border: 'none',
                   backgroundColor: (!inputValue.trim() || isLoading) ? '#6b7280' : '#10b981',
                   color: '#ffffff',
-                  fontSize: '16px',
+                  fontSize: isMobile ? '14px' : '16px',
                   cursor: (!inputValue.trim() || isLoading) ? 'not-allowed' : 'pointer',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  transition: 'all 0.2s ease'
+                  transition: 'all 0.2s ease',
+                  boxShadow: isLoading ? '0 0 15px rgba(107, 114, 128, 0.6)' : '0 0 15px rgba(16, 185, 129, 0.4)'
                 }}
               >
-                {isLoading ? '⏳' : '📤'}
+                {isLoading ? (
+                  <div
+                    style={{
+                      width: isMobile ? '16px' : '20px',
+                      height: isMobile ? '16px' : '20px',
+                      border: '2px solid rgba(255, 255, 255, 0.3)',
+                      borderTop: '2px solid #ffffff',
+                      borderRadius: '50%',
+                      animation: 'spin 0.8s linear infinite'
+                    }}
+                  />
+                ) : '📤'}
               </button>
             </div>
           </div>
@@ -390,6 +482,42 @@ export default function ChatBot() {
           @keyframes spin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
+          }
+          
+          @keyframes spinGlow {
+            0% { 
+              transform: rotate(0deg);
+              box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+            }
+            50% { 
+              box-shadow: 0 0 20px rgba(16, 185, 129, 0.8);
+            }
+            100% { 
+              transform: rotate(360deg);
+              box-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+            }
+          }
+          
+          @keyframes pulse {
+            0%, 100% { 
+              opacity: 0.7;
+              transform: scale(1);
+            }
+            50% { 
+              opacity: 1;
+              transform: scale(1.02);
+            }
+          }
+          
+          @keyframes bounce {
+            0%, 80%, 100% { 
+              transform: scale(0.8);
+              opacity: 0.5;
+            }
+            40% { 
+              transform: scale(1.2);
+              opacity: 1;
+            }
           }
         `
       }} />

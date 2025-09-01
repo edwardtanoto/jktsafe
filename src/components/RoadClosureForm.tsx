@@ -96,19 +96,9 @@ export default function RoadClosureForm() {
         }
 
       } else if (data.status === 'ZERO_RESULTS') {
-        // Handle ZERO_RESULTS with helpful fallback suggestions
-        console.log('🔍 No Google Maps results found for:', query, '- providing fallback suggestions');
-
-        // Provide fallback suggestions for common Indonesian abbreviations
-        const fallbackSuggestions = getFallbackSuggestions(query);
-        setLocationSuggestions(fallbackSuggestions);
-
-        if (fallbackSuggestions.length > 0) {
-          console.log(`✅ Provided ${fallbackSuggestions.length} fallback suggestions`);
-        } else {
-          console.log('❌ No fallback suggestions available');
-        }
-
+        // No results found - just show empty state
+        console.log('🔍 No Google Maps results found for:', query);
+        setLocationSuggestions([]);
       } else {
         console.error('Backend proxy error:', data.error || data.status);
         setLocationSuggestions([]);
@@ -141,6 +131,26 @@ export default function RoadClosureForm() {
 
     // Common Indonesian location abbreviations and expansions
     const fallbackMap: Record<string, Array<{name: string, fullName: string, coordinates: [number, number]}>> = {
+      // Major Cities in Jakarta Metropolitan Area
+      'serang': [
+        { name: 'Serang', fullName: 'Serang, Banten, Indonesia', coordinates: [106.1502, -6.1200] },
+        { name: 'Kota Serang', fullName: 'Kota Serang, Banten, Indonesia', coordinates: [106.1502, -6.1200] }
+      ],
+      'tangerang': [
+        { name: 'Tangerang', fullName: 'Tangerang, Banten, Indonesia', coordinates: [106.6319, -6.1783] },
+        { name: 'Kota Tangerang', fullName: 'Kota Tangerang, Banten, Indonesia', coordinates: [106.6319, -6.1783] }
+      ],
+      'bekasi': [
+        { name: 'Bekasi', fullName: 'Bekasi, Jawa Barat, Indonesia', coordinates: [107.0038, -6.2383] },
+        { name: 'Kota Bekasi', fullName: 'Kota Bekasi, Jawa Barat, Indonesia', coordinates: [107.0038, -6.2383] }
+      ],
+      'depok': [
+        { name: 'Depok', fullName: 'Depok, Jawa Barat, Indonesia', coordinates: [106.8186, -6.4025] }
+      ],
+      'bogor': [
+        { name: 'Bogor', fullName: 'Bogor, Jawa Barat, Indonesia', coordinates: [106.7886, -6.5944] }
+      ],
+      // Jakarta Landmarks
       'dpr': [
         { name: 'DPR RI', fullName: 'Dewan Perwakilan Rakyat Republik Indonesia', coordinates: [106.8266, -6.2047] },
         { name: 'Gedung DPR', fullName: 'Gedung Dewan Perwakilan Rakyat, Jakarta Pusat', coordinates: [106.8266, -6.2047] }
@@ -156,6 +166,16 @@ export default function RoadClosureForm() {
       ],
       'istana': [
         { name: 'Istana Negara', fullName: 'Istana Negara, Jakarta Pusat', coordinates: [106.8185, -6.1702] }
+      ],
+      // Other Major Cities
+      'bandung': [
+        { name: 'Bandung', fullName: 'Bandung, Jawa Barat, Indonesia', coordinates: [107.6191, -6.9175] }
+      ],
+      'semarang': [
+        { name: 'Semarang', fullName: 'Semarang, Jawa Tengah, Indonesia', coordinates: [110.4203, -6.9667] }
+      ],
+      'surabaya': [
+        { name: 'Surabaya', fullName: 'Surabaya, Jawa Timur, Indonesia', coordinates: [112.7521, -7.2575] }
       ],
       'borobudur': [
         { name: 'Borobudur', fullName: 'Candi Borobudur, Magelang, Jawa Tengah', coordinates: [110.2038, -7.6079] }
@@ -394,7 +414,7 @@ export default function RoadClosureForm() {
 
         {/* Info about private sources */}
         <div className="text-center text-xs text-gray-500">
-          <p>Private source information • No public details shared</p>
+          <p>Private source information • Verified anonymous tips</p>
         </div>
 
         {/* Submit Button */}
