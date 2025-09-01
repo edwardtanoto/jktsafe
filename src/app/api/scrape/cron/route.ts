@@ -38,18 +38,57 @@ export async function GET(request: NextRequest) {
     console.log('🔗 Calling main scraping endpoint...');
 
     // Call the main scraping endpoint with proper authentication
-    const response = await fetch(`${baseUrl}/api/scrape/tiktok`, {
-      method: 'GET',
-      headers: {
-        'x-internal-cron': 'true', // Mark this as an internal cron call
-        'x-scrape-secret': scrapeSecret, // Provide authentication
-        'user-agent': 'vercel-cron/1.0' // Identify as cron job
-      },
-      // Increase timeout for scraping operations
-      signal: AbortSignal.timeout(25 * 60 * 1000) // 25 minutes timeout
-    });
+    let response: Response;
+    
+    try {
+      response = await fetch(`${baseUrl}/api/scrape/tiktok`, {
+        method: 'GET',
+        headers: {
+          'x-internal-cron': 'true', // Mark this as an internal cron call
+          'x-scrape-secret': scrapeSecret, // Provide authentication
+          'user-agent': 'vercel-cron/1.0' // Identify as cron job
+        },
+        // Increase timeout for scraping operations
+        signal: AbortSignal.timeout(25 * 60 * 1000) // 25 minutes timeout
+      });
+    } catch (fetchError) {
+      console.error('❌ Fetch request failed:', fetchError);
+      throw new Error(`Failed to call scraping endpoint: ${fetchError instanceof Error ? fetchError.message : 'Unknown fetch error'}`);
+    }
 
-    const data = await response.json();
+    // Check if response is JSON before parsing
+    const contentType = response.headers.get('content-type');
+    let data: any;
+    
+    try {
+      if (contentType && contentType.includes('application/json')) {
+        data = await response.json();
+      } else {
+        // If not JSON, get text and try to extract error info
+        const textResponse = await response.text();
+        console.error('❌ Non-JSON response received:', textResponse.substring(0, 200));
+        
+        // Try to parse as JSON anyway (in case content-type is wrong)
+        try {
+          data = JSON.parse(textResponse);
+        } catch {
+          // If parsing fails, create a structured error response
+          data = {
+            success: false,
+            error: `Invalid response format: ${response.status} ${response.statusText}`,
+            rawResponse: textResponse.substring(0, 100)
+          };
+        }
+      }
+    } catch (parseError) {
+      console.error('❌ Failed to parse response:', parseError);
+      data = {
+        success: false,
+        error: 'Failed to parse response',
+        status: response.status,
+        statusText: response.statusText
+      };
+    }
 
     if (response.ok && data.success) {
       console.log('✅ Cron job completed successfully');
@@ -69,7 +108,7 @@ export async function GET(request: NextRequest) {
         error: data.error || 'Scraping failed',
         scrapingResult: data,
         timestamp: new Date().toISOString()
-      }, { status: response.status });
+      }, { status: response.status || 500 });
     }
 
   } catch (error) {
