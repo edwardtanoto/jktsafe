@@ -116,7 +116,7 @@ async function getSimilarEvents(queryEmbedding: number[]): Promise<EventData[]> 
     const recentEvents = await prisma.event.findMany({
       where: {
         type: {
-          in: ['riot', 'protest', 'demonstration']
+          in: ['protest', 'demonstration']
         },
         createdAt: {
           gte: new Date(Date.now() - 6 * 60 * 60 * 1000) // 6 hours ago
@@ -212,7 +212,7 @@ async function getRecentEventsFallback(): Promise<EventData[]> {
     const events = await prisma.event.findMany({
       where: {
         type: {
-          in: ['riot', 'protest', 'demonstration']
+          in: ['protest', 'demonstration']
         },
         createdAt: {
           gte: new Date(Date.now() - 6 * 60 * 60 * 1000) // 6 hours ago
@@ -337,7 +337,7 @@ ${JSON.stringify(eventsContext, null, 2)}
 
 JENIS DATA YANG TERSEDIA:
 1. WARNING MARKERS (type: "warning"): Peringatan demonstrasi dari Twitter dengan confidence score
-2. EVENTS (type: "riot", "protest", "demonstration"): Kejadian dari TikTok dan sumber lain
+2. EVENTS (type: "protest", "demonstration"): Kejadian dari TikTok dan sumber lain
 
 PETUNJUK KHUSUS UNTUK PERTANYAAN DEMONSTRASI:
 - Ketika ditanya "ada rencana demo dimana" atau pertanyaan serupa, prioritaskan WARNING MARKERS

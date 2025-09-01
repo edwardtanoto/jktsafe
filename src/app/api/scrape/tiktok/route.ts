@@ -7,10 +7,16 @@ import { Root, Video } from '@/types/tiktok';
 
 // Import shared progress tracking and rate limiter
 import { scrapingProgress, updateScrapingProgress, resetScrapingProgress } from '@/lib/scraping-progress';
-import { globalRateLimiter } from '@/lib/rate-limiter';
+import { scrapeRateLimiter, checkRateLimit } from '@/lib/rate-limiter';
 
 // Import authentication middleware
-import { authenticateRequest, handleCors, getCorsHeaders } from '@/lib/auth-middleware';
+import { authenticateScrapeRequest, handleCors, getCorsHeaders } from '@/lib/auth-middleware';
+
+// Import Pub/Sub for live updates
+import { publishNewEvent, publishSystemMessage } from '@/lib/pubsub';
+
+// Import RapidAPI key manager
+import { rapidAPIManager, type ScrapeResult } from '@/lib/rapidapi-key-manager';
 
 async function scrapeTikTokVideos(dateToday: string): Promise<Video[]> {
   try {
@@ -19,38 +25,54 @@ async function scrapeTikTokVideos(dateToday: string): Promise<Video[]> {
 
     // Simple keyword: "lokasi demo" + today's date
     const keyword = `lokasi demo ${dateToday}`;
-
     console.log(`🔎 Searching: "${keyword}"`);
 
-    const url = `https://tiktok-scraper7.p.rapidapi.com/feed/search?keywords=${encodeURIComponent(keyword)}&region=id&count=30&cursor=0&publish_time=1&sort_type=0`;
-
-    const rapidApiKey = process.env.RAPIDAPI_KEY;
-    if (!rapidApiKey) {
-      console.error('RAPIDAPI_KEY is not set in environment variables');
-      return [];
+    // Apply rate limiting before making API calls
+    const rateLimitResult = await checkRateLimit(scrapeRateLimiter, 'tiktok-scrape-check');
+    if (!rateLimitResult.success) {
+      throw new Error('Rate limit exceeded for TikTok scraping');
     }
 
-    const options = {
-      method: 'GET',
-      headers: {
-        'x-rapidapi-key': rapidApiKey,
-        'x-rapidapi-host': 'tiktok-scraper7.p.rapidapi.com'
+    // Determine if it's peak hour and choose appropriate strategy
+    const isPeakHour = rapidAPIManager.isPeakHour();
+    let results: ScrapeResult[];
+    
+    if (isPeakHour) {
+      console.log(`🔥 Peak hour detected - using parallel calls for 90 videos`);
+      results = await rapidAPIManager.makeParallelCalls(keyword, 90);
+    } else {
+      console.log(`💤 Conserve hour detected - using sequential calls for 60 videos`);
+      results = await rapidAPIManager.makeSequentialCalls(keyword, 60);
+    }
+
+    // Combine all successful results
+    const allVideos: Video[] = [];
+    let totalVideosFound = 0;
+
+    for (const result of results) {
+      if (result.success && result.data?.code === 0 && result.data?.data?.videos) {
+        const videos = result.data.data.videos;
+        allVideos.push(...videos);
+        totalVideosFound += videos.length;
+        console.log(`✅ ${result.keyUsed}: Found ${videos.length} videos`);
+      } else {
+        console.log(`❌ ${result.keyUsed}: ${result.error || 'No videos found'}`);
       }
-    };
-
-    // Apply rate limiting before making API call
-    await globalRateLimiter.waitForNextCall();
-
-    const response = await fetch(url, options);
-    const result: Root = await response.json();
-
-    if (result.code === 0 && result.data?.videos) {
-      console.log(`Found ${result.data.videos.length} videos for keyword: ${keyword}`);
-      return result.data.videos;
     }
 
-    console.log(`No videos found for keyword: ${keyword}`);
-    return [];
+    console.log(`🎯 Total videos collected: ${totalVideosFound} from ${results.length} API calls`);
+    
+    // Remove duplicates based on video_id
+    const uniqueVideos = allVideos.filter((video, index, self) => 
+      index === self.findIndex(v => v.video_id === video.video_id)
+    );
+
+    if (uniqueVideos.length !== allVideos.length) {
+      console.log(`🔄 Removed ${allVideos.length - uniqueVideos.length} duplicate videos`);
+    }
+
+    console.log(`📊 Final unique videos: ${uniqueVideos.length}`);
+    return uniqueVideos;
 
   } catch (error) {
     console.error('Error in TikTok scraping:', error);
@@ -139,7 +161,7 @@ async function processTikTokVideo(video: Video): Promise<boolean> {
     
     // Create or update event in database using upsert to prevent duplicates
     try {
-      await prisma.event.upsert({
+      const result = await prisma.event.upsert({
         where: {
           url: tiktokUrl
         },
@@ -162,12 +184,23 @@ async function processTikTokVideo(video: Video): Promise<boolean> {
           source: 'TikTok',
           url: tiktokUrl,
           verified: false,
-          type: 'riot',
+          type: 'protest',
           extractedLocation: locationResult.exact_location,
           googleMapsUrl: googleMapsUrl,
           originalCreatedAt: originalCreatedAt
         }
       });
+
+      // Publish new event to Redis for live updates
+      await publishNewEvent(result.id, 'created', {
+        title: result.title,
+        lat: result.lat,
+        lng: result.lng,
+        type: result.type,
+        source: result.source,
+        extractedLocation: result.extractedLocation
+      });
+
     } catch (dbError) {
       if (dbError instanceof Error && dbError.message.includes('Unique constraint')) {
         console.log(`⚠️ Event already exists for URL: ${tiktokUrl} - skipping`);
@@ -197,27 +230,28 @@ export async function GET(request: NextRequest) {
   const corsResponse = handleCors(request);
   if (corsResponse) return corsResponse;
 
-  // TEMPORARY: Skip authentication for testing - REMOVE AFTER DEBUGGING
-  // Authenticate request
-  /*
-  const auth = authenticateRequest(request);
-  if (!auth.isValid) {
-    return NextResponse.json(
-      {
-        success: false,
-        error: auth.error,
-        message: 'Authentication required for scraping operations'
-      },
-      {
-        status: 401,
-        headers: getCorsHeaders()
-      }
-    );
-  }
-  */
+  // Check if this is a cron job request (internal call from /api/scrape/cron)
+  const isInternalCronCall = request.headers.get('x-internal-cron') === 'true';
 
-  console.log('🚨 TEMPORARY: Scraping endpoint is PUBLIC for testing');
-  console.log('⚠️  REMOVE authentication bypass after debugging');
+  // Authenticate scrape request (skip for internal cron calls)
+  if (!isInternalCronCall) {
+    const auth = authenticateScrapeRequest(request);
+    if (!auth.isValid) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: auth.error,
+          message: 'Authentication required for scraping operations'
+        },
+        {
+          status: 401,
+          headers: getCorsHeaders()
+        }
+      );
+    }
+  }
+
+  console.log('🔐 Scrape request authenticated successfully');
 
   const scrapingStartTime = Date.now();
 
@@ -242,16 +276,15 @@ export async function GET(request: NextRequest) {
     console.log('🚀 Starting concurrent TikTok demo scraping...');
 
     // Check rate limiter status
-    const remainingCalls = globalRateLimiter.getRemainingCalls();
-    const timeUntilReset = globalRateLimiter.getTimeUntilReset();
+    const rateLimitCheck = await checkRateLimit(scrapeRateLimiter, 'tiktok-scrape-check');
 
-    if (remainingCalls === 0) {
+    if (!rateLimitCheck.success) {
       return NextResponse.json({
         success: false,
-        error: `Rate limit exceeded. Try again in ${Math.ceil(timeUntilReset / 1000)} seconds.`,
+        error: `Rate limit exceeded. Try again in ${Math.ceil((rateLimitCheck.reset || 0) / 1000)} seconds.`,
         rateLimit: {
-          remainingCalls: 0,
-          resetInSeconds: Math.ceil(timeUntilReset / 1000)
+          remainingCalls: rateLimitCheck.remaining || 0,
+          resetInSeconds: Math.ceil((rateLimitCheck.reset || 0) / 1000)
         }
       }, {
         status: 429,
@@ -259,7 +292,7 @@ export async function GET(request: NextRequest) {
       }); // Too Many Requests
     }
 
-    console.log(`📊 Rate limiter: ${remainingCalls} calls remaining, resets in ${Math.ceil(timeUntilReset / 1000)}s`);
+    console.log(`📊 Rate limiter: ${rateLimitCheck.remaining} calls remaining, resets in ${Math.ceil((rateLimitCheck.reset || 0) / 1000)}s`);
 
     // Initialize progress tracking
     updateScrapingProgress({
@@ -349,9 +382,16 @@ export async function GET(request: NextRequest) {
     console.log(`📊 Average processing time per video: ${avgTimePerVideo}ms`);
     console.log(`🚀 Concurrent processing speedup: ~${Math.round((videos.length * 1000) / totalTime)}x faster than sequential`);
 
+    // Publish scraping completion message
+    await publishSystemMessage('scrape_completed', `Processed ${processedCount} demo locations from ${videos.length} TikTok videos`);
+
     // Get final rate limiter status
-    const finalRemainingCalls = globalRateLimiter.getRemainingCalls();
-    const finalTimeUntilReset = globalRateLimiter.getTimeUntilReset();
+    const finalRateLimitCheck = await checkRateLimit(scrapeRateLimiter, 'tiktok-scrape-final');
+    const finalRemainingCalls = finalRateLimitCheck.remaining || 0;
+    const finalTimeUntilReset = finalRateLimitCheck.reset || 0;
+
+    // Get key usage statistics
+    const keyStats = rapidAPIManager.getKeyUsageStats();
 
     return NextResponse.json({
       success: true,
@@ -361,6 +401,8 @@ export async function GET(request: NextRequest) {
       keyword: `lokasi demo ${dateToday}`,
       totalTime: totalTime,
       avgTimePerVideo: avgTimePerVideo,
+      isPeakHour: rapidAPIManager.isPeakHour(),
+      keyUsage: keyStats,
       rateLimit: {
         remainingCalls: finalRemainingCalls,
         resetInSeconds: Math.ceil(finalTimeUntilReset / 1000)

@@ -25,6 +25,9 @@ model Event {
   // embedding         Unsupported("vector")? // Temporarily disabled - requires pgvector extension
 
   @@map("events")
+  @@index([createdAt], map: "idx_events_createdAt")
+  @@index([type], map: "idx_events_type")
+  @@index([createdAt, type], map: "idx_events_createdAt_type")
 }
 
 model GeocodeCache {
@@ -63,4 +66,5 @@ model WarningMarker {
   updatedAt        DateTime @updatedAt
 
   @@map("warning_markers")
+  @@index([createdAt], map: "idx_warning_markers_createdAt")
 }

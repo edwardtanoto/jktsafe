@@ -30,7 +30,7 @@ async function scrapeKompas(): Promise<Article[]> {
       const url = $element.find('a').attr('href');
 
       if (title && description && url && url.includes('kompas.com')) {
-        // Filter for potentially relevant articles (containing keywords related to riots/unrest)
+        // Filter for potentially relevant articles (containing keywords related to protests/unrest)
         const content = (title + description).toLowerCase();
         if (content.includes('kerusuhan') || content.includes('demo') || content.includes('unjuk rasa') ||
             content.includes('bentrok') || content.includes('rusak') || content.includes('api')) {

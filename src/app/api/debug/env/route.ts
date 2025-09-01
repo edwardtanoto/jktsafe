@@ -1,21 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { authenticateRequest } from '@/lib/auth-middleware';
 
-export async function GET(_request: NextRequest) {
+export async function GET(request: NextRequest) {
   try {
-    console.log('🔍 Environment Debug:');
-    console.log('- API_SECRET_KEY exists:', !!process.env.API_SECRET_KEY);
-    console.log('- API_SECRET_KEY value:', process.env.API_SECRET_KEY);
-    console.log('- API_SECRET_KEY length:', process.env.API_SECRET_KEY?.length);
+    // Require authentication for debug endpoints
+    const auth = authenticateRequest(request);
+    if (!auth.isValid) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: auth.error,
+          message: 'Authentication required for debug operations'
+        },
+        { status: 401 }
+      );
+    }
 
+    // Only show existence, not actual values
     return NextResponse.json({
       success: true,
       env: {
-        API_SECRET_KEY: {
-          exists: !!process.env.API_SECRET_KEY,
-          length: process.env.API_SECRET_KEY?.length,
-          value: process.env.API_SECRET_KEY
+        SCRAPE_SECRET: {
+          exists: !!process.env.SCRAPE_SECRET,
+          length: process.env.SCRAPE_SECRET?.length
+        },
+        DATABASE_URL: {
+          exists: !!process.env.DATABASE_URL,
+          type: process.env.DATABASE_URL?.startsWith('postgresql') ? 'postgresql' : 'other'
+        },
+        UPSTASH_REDIS_REST_URL: {
+          exists: !!process.env.UPSTASH_REDIS_REST_URL
         }
-      }
+      },
+      message: 'Debug endpoint - remove in production'
     });
   } catch (error) {
     console.error('Debug API error:', error);
