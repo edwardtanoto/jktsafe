@@ -681,14 +681,129 @@ export default function RiotMap() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Fetch events on mount and set up periodic refresh
+  // Set up EventSource for real-time updates
+  useEffect(() => {
+    let eventSource: EventSource | null = null;
+
+    const setupEventSource = () => {
+      try {
+        console.log('🔌 Connecting to live event stream...');
+        eventSource = new EventSource('/api/events/stream');
+
+        eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+
+            switch (data.type) {
+              case 'initial':
+                console.log('📡 Received initial data:', data.events?.length || 0, 'events');
+                // Initial data is already loaded via fetchEvents()
+                break;
+
+              case 'update':
+                if (data.events?.length > 0 || data.warningMarkers?.length > 0) {
+                  console.log('🔄 Live update received:', data.events?.length || 0, 'events,', data.warningMarkers?.length || 0, 'warnings');
+
+                  // Merge new data with existing events
+                  setEvents(prevEvents => {
+                    const newEvents = [...prevEvents];
+
+                    // Add new events
+                    if (data.events) {
+                      data.events.forEach((newEvent: Event) => {
+                        const existingIndex = newEvents.findIndex(e => e.id === newEvent.id);
+                        if (existingIndex >= 0) {
+                          // Update existing event
+                          newEvents[existingIndex] = { ...newEvent, type: newEvent.type || 'riot' };
+                        } else {
+                          // Add new event
+                          newEvents.unshift({ ...newEvent, type: newEvent.type || 'riot' });
+                        }
+                      });
+                    }
+
+                    // Add new warning markers
+                    if (data.warningMarkers) {
+                      data.warningMarkers.forEach((newWarning: Event) => {
+                        const existingIndex = newEvents.findIndex(e => e.id === newWarning.id && e.type === 'warning');
+                        if (existingIndex >= 0) {
+                          // Update existing warning
+                          newEvents[existingIndex] = { ...newWarning, type: 'warning' };
+                        } else {
+                          // Add new warning
+                          newEvents.unshift({ ...newWarning, type: 'warning' });
+                        }
+                      });
+                    }
+
+                    // Keep only the most recent 200 events to prevent memory issues
+                    return newEvents.slice(0, 200);
+                  });
+
+                  // Update last update timestamp
+                  setLastUpdate(new Date().toLocaleTimeString('en-US', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit'
+                  }));
+
+                  // Show notification for new updates
+                  if (data.events?.length > 0 || data.warningMarkers?.length > 0) {
+                    console.log('✅ Live update applied to map');
+                  }
+                }
+                break;
+
+              case 'heartbeat':
+                // Heartbeat received, connection is alive
+                break;
+
+              default:
+                console.log('📡 Unknown message type:', data.type);
+            }
+          } catch (error) {
+            console.error('❌ Error parsing live update:', error);
+          }
+        };
+
+        eventSource.onerror = (error) => {
+          console.error('❌ EventSource error:', error);
+          // Attempt to reconnect after a delay
+          setTimeout(() => {
+            if (eventSource) {
+              eventSource.close();
+              setupEventSource();
+            }
+          }, 5000);
+        };
+
+        eventSource.onopen = () => {
+          console.log('✅ Connected to live event stream');
+        };
+
+      } catch (error) {
+        console.error('❌ Failed to setup EventSource:', error);
+      }
+    };
+
+    setupEventSource();
+
+    return () => {
+      if (eventSource) {
+        console.log('🔌 Disconnecting from live event stream');
+        eventSource.close();
+      }
+    };
+  }, []);
+
+  // Fetch events on mount and set up periodic refresh (fallback)
   useEffect(() => {
     fetchEvents();
 
-    // Set up periodic refresh every 5 minutes
+    // Set up periodic refresh every 5 minutes (fallback for when EventSource fails)
     const refreshInterval = setInterval(() => {
       if (!loading && !isScraping) {
-        console.log('🔄 Periodic refresh of events...');
+        console.log('🔄 Periodic refresh of events (fallback)...');
         fetchEvents();
       }
     }, 5 * 60 * 1000); // 5 minutes

@@ -11,6 +11,8 @@
   "dependencies": {
     "@prisma/client": "^6.15.0",
     "@types/pg": "^8.15.5",
+    "@upstash/ratelimit": "^2.0.6",
+    "@upstash/redis": "^1.35.3",
     "axios": "^1.11.0",
     "cheerio": "^1.1.2",
     "mapbox-gl": "^3.14.0",

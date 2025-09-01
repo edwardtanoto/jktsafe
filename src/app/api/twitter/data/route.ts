@@ -1,8 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { authenticateAdminRequest } from '@/lib/admin-middleware';
 
 export async function GET(request: NextRequest) {
   try {
+    // Require admin authentication for Twitter data access
+    const auth = authenticateAdminRequest(request);
+    if (!auth.isValid) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: auth.error,
+          message: 'Admin authentication required'
+        },
+        { status: 401 }
+      );
+    }
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '20');
     const processed = searchParams.get('processed'); // 'true', 'false', or null for all

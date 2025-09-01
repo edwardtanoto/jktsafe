@@ -1,16 +1,34 @@
 # Copy this file to .env.local and fill in your actual values
 
-# Mapbox Configuration - REQUIRED
-NEXT_PUBLIC_MAPBOX_TOKEN=pk.eyJ1IjoiZWR3YXJkdGFub3RvMTIiLCJhIjoiY2xtMGRsZTVoMDljODNkbndzYm8wenJndSJ9.1Dn3lhzVkrwZdRKwmwmAMQ
+# Database URLs - Production Setup
+DATABASE_URL_LOCAL="file:./dev.db"
+NEON_DATABASE_URL_DEV=your_neon_dev_database_url_here
+NEON_DATABASE_URL_PROD=your_neon_prod_database_url_here
 
-# Database
-DATABASE_URL="file:./dev.db"
+# Upstash Redis - Production Setup
+UPSTASH_API_KEY=your_upstash_api_key_here
+UPSTASH_REDIS_REST_URL=your_upstash_redis_rest_url_here
+UPSTASH_REDIS_REST_TOKEN=your_upstash_redis_rest_token_here
+
+# Mapbox Configuration - REQUIRED
+NEXT_PUBLIC_MAPBOX_TOKEN=your_mapbox_token_here
 
 # OpenRouter (required for location extraction)
 OPENROUTER_API_KEY=your_openrouter_api_key_here
 
-# RapidAPI (required for TikTok scraping)
+# RapidAPI Keys (required for TikTok scraping) - Multiple keys for rotation
 RAPIDAPI_KEY=your_rapidapi_key_here
+RAPIDAPI_KEY_ONE=your_rapidapi_key_one_here
+RAPIDAPI_KEY_TWO=your_rapidapi_key_two_here
+RAPIDAPI_KEY_THREE=your_rapidapi_key_three_here
+RAPIDAPI_KEY_FOUR=your_rapidapi_key_four_here
+RAPIDAPI_KEY_FIVE=your_rapidapi_key_five_here
 
 # SERP API (required for Google Maps geocoding)
 SERPAPI_KEY=your_serpapi_key_here
+
+# Scraping Security
+SCRAPE_SECRET=your_secure_scrape_secret_here_please_change_this
+
+# Admin Access
+ADMIN_SECRET=your_secure_admin_secret_here_please_change_this

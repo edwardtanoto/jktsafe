@@ -1,5 +1,4 @@
 import OpenAI from 'openai';
-import { env } from '../../env.config';
 import type { TwitterTimeline } from '@/types/twitter';
 
 export interface LocationResult {
@@ -19,7 +18,7 @@ export interface DetailedLocationResult {
 
 export async function extractLocationFromArticle(title: string, content: string): Promise<LocationResult> {
   try {
-    if (!env.openRouter.apiKey) {
+    if (!process.env.OPENROUTER_API_KEY) {
       return {
         success: false,
         error: 'OpenRouter API key not configured'
@@ -28,7 +27,7 @@ export async function extractLocationFromArticle(title: string, content: string)
 
     const client = new OpenAI({
       baseURL: "https://openrouter.ai/api/v1",
-      apiKey: env.openRouter.apiKey,
+      apiKey: process.env.OPENROUTER_API_KEY,
       defaultHeaders: {
         "HTTP-Referer": "https://safe-jakarta.vercel.app", // Optional. Site URL for rankings on openrouter.ai.
         "X-Title": "Safe Jakarta", // Optional. Site title for rankings on openrouter.ai.
@@ -255,20 +254,16 @@ function applyLocationValidation(result: DetailedLocationResult): DetailedLocati
 
 async function extractDetailedLocationFromTikTokInternal(videoData: any): Promise<DetailedLocationResult> {
   try {
-    if (!env.openRouter.apiKey) {
+    if (!process.env.OPENROUTER_API_KEY) {
       console.error('❌ OpenRouter API key not configured');
       return {
         success: false,
         error: 'OpenRouter API key not configured'
       };
     }
-
-    console.log(`🔧 OpenRouter Config Check:`);
-    console.log(`- API Key: ${env.openRouter.apiKey ? '✅ Set' : '❌ Missing'}`);
-
     const client = new OpenAI({
       baseURL: "https://openrouter.ai/api/v1",
-      apiKey: env.openRouter.apiKey,
+      apiKey: process.env.OPENROUTER_API_KEY,
       defaultHeaders: {
         "HTTP-Referer": "http://localhost:3000",
         "X-Title": "Safe Jakarta",
@@ -753,13 +748,13 @@ export async function extractDetailedLocationFromTikTok(videoData: any): Promise
 // Debug function to test OpenRouter connection
 export async function testOpenRouterConnection(): Promise<{success: boolean, error?: string}> {
   try {
-    if (!env.openRouter.apiKey) {
+    if (!process.env.OPENROUTER_API_KEY) {
       return { success: false, error: 'API key not configured' };
     }
 
     const client = new OpenAI({
       baseURL: "https://openrouter.ai/api/v1",
-      apiKey: env.openRouter.apiKey,
+      apiKey: process.env.OPENROUTER_API_KEY,
       defaultHeaders: {
         "HTTP-Referer": "https://safe-jakarta.vercel.app",
         "X-Title": "Safe Jakarta",
@@ -784,7 +779,7 @@ export async function testOpenRouterConnection(): Promise<{success: boolean, err
 // Extract location from Twitter text about planned demonstrations
 export async function extractLocationFromTweet(tweetText: string, userInfo?: any): Promise<LocationResult> {
   try {
-    if (!env.openRouter.apiKey) {
+    if (!process.env.OPENROUTER_API_KEY) {
       return {
         success: false,
         error: 'OpenRouter API key not configured'
@@ -793,7 +788,7 @@ export async function extractLocationFromTweet(tweetText: string, userInfo?: any
 
     const client = new OpenAI({
       baseURL: "https://openrouter.ai/api/v1",
-      apiKey: env.openRouter.apiKey,
+      apiKey: process.env.OPENROUTER_API_KEY,
       defaultHeaders: {
         "HTTP-Referer": "https://safe-jakarta.vercel.app",
         "X-Title": "Safe Jakarta",

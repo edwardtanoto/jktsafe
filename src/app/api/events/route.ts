@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { authenticateRequest, handleCors, getCorsHeaders } from '@/lib/auth-middleware';
-import { publicRateLimiter } from '@/lib/rate-limiter';
+import { publicRateLimiter, checkRateLimit } from '@/lib/rate-limiter';
 
 export async function GET(request: NextRequest) {
   // Handle CORS preflight
@@ -12,19 +12,25 @@ export async function GET(request: NextRequest) {
   console.log(`📊 Events API accessed from: ${request.headers.get('user-agent')?.substring(0, 50)}...`);
 
   // Apply rate limiting to public access
-  const remainingCalls = publicRateLimiter.getRemainingCalls();
-  if (remainingCalls === 0) {
+  const clientIp = request.headers.get('x-forwarded-for') || 
+                   request.headers.get('x-real-ip') || 
+                   'unknown';
+  
+  const rateLimitResult = await checkRateLimit(publicRateLimiter, clientIp);
+  if (!rateLimitResult.success) {
     return NextResponse.json({
       success: false,
       error: 'Rate limit exceeded. Too many requests.',
-      message: 'Please wait before making another request.'
+      message: 'Please wait before making another request.',
+      rateLimit: {
+        remaining: rateLimitResult.remaining || 0,
+        resetInSeconds: Math.ceil((rateLimitResult.reset || 0) / 1000)
+      }
     }, {
       status: 429,
       headers: getCorsHeaders()
     });
   }
-
-  await publicRateLimiter.waitForNextCall();
 
   try {
     const { searchParams } = new URL(request.url);

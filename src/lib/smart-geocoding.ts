@@ -1,5 +1,5 @@
 import { geocodeWithSerp, SerpGeocodeResult } from './serp-geocoding';
-import { globalRateLimiter } from './rate-limiter';
+import { globalRateLimiter, checkRateLimit } from './rate-limiter';
 import {
   getCachedGeocode,
   storeGeocodeInCache,
@@ -100,7 +100,10 @@ export async function smartGeocodeLocation(location: string): Promise<UnifiedGeo
     console.log(`❌ Cache miss for: "${location}" - calling APIs`);
 
     // Step 2: Apply rate limiting before API calls
-    await globalRateLimiter.waitForNextCall();
+    const rateLimitResult = await checkRateLimit(globalRateLimiter, 'geocoding-api-call');
+    if (!rateLimitResult.success) {
+      console.warn('⚠️ Rate limit exceeded for geocoding, proceeding anyway');
+    }
 
     // Step 3: Try SERP first, then Google Maps as fallback
     console.log(`🌐 Trying SERP geocoding for: "${location}"`);

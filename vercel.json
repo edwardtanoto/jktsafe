@@ -1,5 +1,5 @@
 {
-  "buildCommand": "prisma generate && prisma db push --accept-data-loss && next build",
+  "buildCommand": "prisma generate && prisma migrate deploy && next build",
   "outputDirectory": ".next",
   "framework": "nextjs",
   "functions": {
@@ -7,6 +7,18 @@
       "maxDuration": 30
     }
   },
+  "crons": [
+    {
+      "path": "/api/scrape/tiktok",
+      "schedule": "0 12-23,0-1 * * *",
+      "comment": "Peak hours: 12pm-2am (every hour)"
+    },
+    {
+      "path": "/api/scrape/tiktok",
+      "schedule": "0 2,4,6,8,10 * * *",
+      "comment": "Conserve hours: 2am-12pm (every 2 hours)"
+    }
+  ],
   "env": {
     "PRISMA_GENERATE_DATAPROXY": "true",
     "PRISMA_GENERATE_SKIP_DOWNLOAD": "true"
