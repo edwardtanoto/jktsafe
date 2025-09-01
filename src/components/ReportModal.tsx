@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect } from 'react';
 import mapboxgl from 'mapbox-gl';
-import { localEnv } from '../../env.local';
 
 interface ReportModalProps {
   onClose: () => void;
@@ -22,7 +21,7 @@ export default function ReportModal({ onClose, onSubmit }: ReportModalProps) {
   useEffect(() => {
     if (!modalMapRef.current) return;
 
-    mapboxgl.accessToken = localEnv.mapboxToken;
+    mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
 
     modalMap.current = new mapboxgl.Map({
       container: modalMapRef.current,
