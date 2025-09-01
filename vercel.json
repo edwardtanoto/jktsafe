@@ -4,7 +4,7 @@
   "framework": "nextjs",
   "functions": {
     "src/app/api/**/*.ts": {
-      "maxDuration": 60
+      "maxDuration": 800
     },
     "src/app/api/scrape/cron/route.ts": {
       "maxDuration": 800
@@ -13,7 +13,7 @@
       "maxDuration": 800
     },
     "src/app/api/rss/fetch/route.ts": {
-      "maxDuration": 120
+      "maxDuration": 800
     }
   },
   "crons": [
