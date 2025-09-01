@@ -28,7 +28,7 @@ export interface Video {
   share_count: number;
   download_count: number;
   create_time: number;
-  anchors: any;
+  anchors: Record<string, unknown>;
   anchors_extras: string;
   is_ad: boolean;
   commerce_info: {

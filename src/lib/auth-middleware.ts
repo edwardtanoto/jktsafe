@@ -74,8 +74,8 @@ export function authenticateRequest(request: NextRequest): { isValid: boolean; e
 }
 
 // Middleware function for API routes
-export function withAuth(handler: Function) {
-  return async (request: NextRequest, ...args: any[]) => {
+export function withAuth(handler: (request: NextRequest, ...args: unknown[]) => Promise<NextResponse>) {
+  return async (request: NextRequest, ...args: unknown[]) => {
     const auth = authenticateRequest(request);
 
     if (!auth.isValid) {
@@ -95,10 +95,6 @@ export function withAuth(handler: Function) {
 
 // CORS headers for security
 export function getCorsHeaders() {
-  const allowedOrigins = process.env.NODE_ENV === 'production'
-    ? ['https://lacakdemo.vercel.app', 'https://lacakdemo.com'] // Add your production domains
-    : ['http://localhost:3000', 'http://localhost:3001'];
-
   const origin = process.env.NODE_ENV === 'production'
     ? 'https://lacakdemo.vercel.app' // Default production domain
     : 'http://localhost:3000';

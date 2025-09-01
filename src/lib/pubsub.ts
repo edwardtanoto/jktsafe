@@ -18,7 +18,7 @@ export interface NewEventMessage {
   type: 'event';
   action: 'created' | 'updated' | 'deleted';
   id: number;
-  data?: any;
+  data?: Record<string, unknown>;
   timestamp: number;
 }
 
@@ -26,7 +26,7 @@ export interface NewWarningMarkerMessage {
   type: 'warning_marker';
   action: 'created' | 'updated' | 'deleted';
   id: number;
-  data?: any;
+  data?: Record<string, unknown>;
   timestamp: number;
 }
 
@@ -62,7 +62,7 @@ export async function publishMessage(channel: string, message: PubSubMessage): P
 /**
  * Publish new event notification
  */
-export async function publishNewEvent(eventId: number, action: 'created' | 'updated' | 'deleted' = 'created', data?: any): Promise<boolean> {
+export async function publishNewEvent(eventId: number, action: 'created' | 'updated' | 'deleted' = 'created', data?: Record<string, unknown>): Promise<boolean> {
   const message: NewEventMessage = {
     type: 'event',
     action,
@@ -77,7 +77,7 @@ export async function publishNewEvent(eventId: number, action: 'created' | 'upda
 /**
  * Publish new warning marker notification
  */
-export async function publishNewWarningMarker(markerId: number, action: 'created' | 'updated' | 'deleted' = 'created', data?: any): Promise<boolean> {
+export async function publishNewWarningMarker(markerId: number, action: 'created' | 'updated' | 'deleted' = 'created', data?: Record<string, unknown>): Promise<boolean> {
   const message: NewWarningMarkerMessage = {
     type: 'warning_marker',
     action,

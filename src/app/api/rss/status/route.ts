@@ -98,7 +98,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function getCacheStats(): Promise<any> {
+async function getCacheStats(): Promise<Record<string, unknown>> {
   try {
     const keys = [
       'turnbackhoax:last_guid',
@@ -113,7 +113,7 @@ async function getCacheStats(): Promise<any> {
       keys.map(key => redis.get(key).catch(() => null))
     );
 
-    const stats: Record<string, any> = {};
+    const stats: Record<string, unknown> = {};
     keys.forEach((key, index) => {
       const cleanKey = key.replace('turnbackhoax:', '').replace('hoax:stats:', '');
       stats[cleanKey] = values[index];
@@ -146,7 +146,7 @@ async function calculateCacheHitRate(): Promise<number> {
       return 0; // No data available
     }
 
-    const hitRate = parseInt(cacheHits) / parseInt(totalRequests);
+    const hitRate = parseInt(String(cacheHits)) / parseInt(String(totalRequests));
     return Math.round(hitRate * 100) / 100; // Round to 2 decimal places
 
   } catch (error) {

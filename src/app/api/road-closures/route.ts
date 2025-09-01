@@ -237,7 +237,7 @@ export async function GET(request: NextRequest) {
     const severity = searchParams.get('severity'); // 'high', 'critical', etc.
     const closureType = searchParams.get('closureType'); // 'full_closure', etc.
 
-    const where: any = {
+    const where: Record<string, unknown> = {
       type: 'road_closure'
     };
 

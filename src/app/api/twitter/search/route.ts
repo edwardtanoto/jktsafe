@@ -138,7 +138,7 @@ export async function GET(request: NextRequest) {
             views: tweet.views || '0',
             quotes: tweet.quotes || 0,
             replies: tweet.replies || 0,
-            userInfo: filteredUserInfo as any, // Store filtered JSON
+            userInfo: filteredUserInfo, // Store filtered JSON
             verified: false, // Will be processed later
           }
         });

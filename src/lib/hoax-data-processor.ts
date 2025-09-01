@@ -42,7 +42,7 @@ export class HoaxDataProcessor {
         console.log(`Hoax ${hoaxData.guid} already processed`);
         return {
           success: true,
-          hoaxId: (cached as any).id,
+          hoaxId: (cached as Record<string, unknown>).id as number,
           embeddingGenerated: true
         };
       }
@@ -340,7 +340,7 @@ export class HoaxDataProcessor {
             }))
           }
         ]
-      } as any;
+      } as Record<string, unknown>;
 
       if (category) {
         searchConditions.AND.push({ hoaxCategory: category });

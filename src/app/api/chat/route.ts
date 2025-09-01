@@ -40,6 +40,40 @@ interface ChatRequest {
   };
 }
 
+interface ChatContext {
+  currentView?: string;
+  timeRange?: string;
+  includeHoaxes?: boolean;
+}
+
+interface HoaxResult {
+  id: string;
+  title: string;
+  originalClaim?: string | null;
+  hoaxCategory: string;
+  verificationMethod?: string | null;
+  investigationResult?: string | null;
+  authorName?: string | null;
+  sourceUrl: string;
+  publicationDate: Date;
+  similarity?: number;
+}
+
+interface WarningMarker {
+  id: number;
+  text: string;
+  extractedLocation: string | null;
+  lat: number | null;
+  lng: number | null;
+  confidenceScore: number | null;
+  verified: boolean;
+  createdAt: Date;
+  tweetId: string;
+  userInfo: Record<string, unknown>;
+  views: string | number | null;
+  retweets: number | null;
+}
+
 interface EventData {
   id: number;
   title: string;
@@ -51,10 +85,10 @@ interface EventData {
   createdAt: Date;
   verified: boolean;
   source: string;
-  url?: string;
-  confidenceScore?: number;
-  views?: string | number;
-  retweets?: number;
+  url?: string | null;
+  confidenceScore?: number | null;
+  views?: string | number | null;
+  retweets?: number | null;
 }
 
 export async function POST(request: NextRequest) {
@@ -108,7 +142,7 @@ async function getSimilarEvents(queryEmbedding: number[]): Promise<EventData[]> 
   try {
     // For now, skip vector similarity search and use basic filtering
     // TODO: Re-enable when embedding column is added to events table
-    const similarEvents = [];
+    const similarEvents: EventData[] = [];
 
     // Also get some recent events as fallback
     const recentEvents = await prisma.event.findMany({
@@ -169,7 +203,7 @@ async function getSimilarEvents(queryEmbedding: number[]): Promise<EventData[]> 
     });
 
     // Transform warning markers to match EventData format
-    const transformedWarnings = warningMarkers.map((marker: any) => ({
+    const transformedWarnings = warningMarkers.map((marker) => ({
       id: marker.id,
       title: `⚠️ Demo Alert: ${marker.extractedLocation}`,
       description: marker.text.length > 200 ? marker.text.substring(0, 200) + '...' : marker.text,
@@ -187,7 +221,7 @@ async function getSimilarEvents(queryEmbedding: number[]): Promise<EventData[]> 
     }));
 
     // Combine all results
-    const allEvents = [...(similarEvents as any[]), ...recentEvents, ...transformedWarnings];
+    const allEvents = [...similarEvents, ...recentEvents, ...transformedWarnings];
     const seenIds = new Set();
     const uniqueEvents = allEvents.filter(event => {
       const uniqueKey = `${event.type}-${event.id}`;
@@ -265,7 +299,7 @@ async function getRecentEventsFallback(): Promise<EventData[]> {
     });
 
     // Transform warning markers to match EventData format
-    const transformedWarnings = warningMarkers.map((marker: any) => ({
+    const transformedWarnings = warningMarkers.map((marker) => ({
       id: marker.id,
       title: `⚠️ Demo Alert: ${marker.extractedLocation}`,
       description: marker.text.length > 200 ? marker.text.substring(0, 200) + '...' : marker.text,
@@ -294,7 +328,7 @@ async function getRecentEventsFallback(): Promise<EventData[]> {
   }
 }
 
-async function generateChatResponse(message: string, events: EventData[], hoaxResults: any[] | null, context: any) {
+async function generateChatResponse(message: string, events: EventData[], hoaxResults: HoaxResult[] | null, context: ChatContext) {
   try {
     // Format events data for LLM context
     const eventsContext = events.map(event => {
@@ -313,9 +347,9 @@ async function generateChatResponse(message: string, events: EventData[], hoaxRe
       if (event.type === 'warning') {
         return {
           ...baseInfo,
-          confidenceScore: `${Math.round(((event as any).confidenceScore || 0) * 100)}%`,
-          views: (event as any).views || 0,
-          retweets: (event as any).retweets || 0,
+          confidenceScore: `${Math.round((event.confidenceScore || 0) * 100)}%`,
+          views: event.views || 0,
+          retweets: event.retweets || 0,
           markdownLink: event.url ? `[Twitter](${event.url})` : 'Tidak ada link tersedia',
           alertType: 'Peringatan Demonstrasi'
         };
@@ -478,7 +512,7 @@ function detectHoaxQuery(message: string): boolean {
   return hoaxQuestionPatterns.some(pattern => pattern.test(lowerMessage));
 }
 
-async function searchRelevantHoaxes(message: string): Promise<any[]> {
+async function searchRelevantHoaxes(message: string): Promise<HoaxResult[]> {
   try {
     // Generate embedding for the message
     const queryEmbedding = generateSimpleEmbedding(message);

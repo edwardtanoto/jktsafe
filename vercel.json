@@ -4,10 +4,10 @@
   "framework": "nextjs",
   "functions": {
     "src/app/api/**/*.ts": {
-      "maxDuration": 30
+      "maxDuration": 60
     },
     "src/app/api/scrape/cron/route.ts": {
-      "maxDuration": 900
+      "maxDuration": 800
     },
     "src/app/api/rss/fetch/route.ts": {
       "maxDuration": 120
@@ -16,18 +16,15 @@
   "crons": [
     {
       "path": "/api/scrape/cron",
-      "schedule": "0 12-23,0-1 * * *",
-      "comment": "Peak hours: 12pm-2am (every hour)"
+      "schedule": "0 12-23,0-1 * * *"
     },
     {
       "path": "/api/scrape/cron",
-      "schedule": "0 2,4,6,8,10 * * *",
-      "comment": "Conserve hours: 2am-12pm (every 2 hours)"
+      "schedule": "0 2,4,6,8,10 * * *"
     },
     {
       "path": "/api/rss/fetch",
-      "schedule": "0 */2 * * *",
-      "comment": "Fetch TurnBackHoax RSS feed every 2 hours (cost-optimized)"
+      "schedule": "0 */2 * * *"
     }
   ],
   "env": {

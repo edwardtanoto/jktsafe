@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
     console.log(`🔍 Fetching Twitter data with limit=${limit}, processed=${processed}`);
 
     // Build where clause
-    let whereClause: any = {};
+    const whereClause: Record<string, unknown> = {};
     
     if (processed === 'true') {
       whereClause.extractedLocation = { not: null };
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
 
     // Format the data for better readability
     const formattedData = twitterData.map(tweet => {
-      const userInfo = tweet.userInfo as any;
+      const userInfo = tweet.userInfo as Record<string, unknown>;
       return {
         id: tweet.id,
         tweetId: tweet.tweetId,

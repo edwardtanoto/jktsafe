@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { prisma } from '../../../../lib/prisma';
-import { PUBSUB_CHANNELS, type PubSubMessage } from '../../../../lib/pubsub';
+import '../../../../lib/pubsub';
 
 // Use Node.js runtime since Prisma doesn't work in Edge runtime
 export const runtime = 'nodejs';
@@ -10,7 +10,6 @@ export async function GET(request: NextRequest) {
   const responseStream = new ReadableStream({
     start(controller) {
       let isConnected = true;
-      let lastMessageId = '0';
 
       // Send initial data
       const sendInitialData = async () => {

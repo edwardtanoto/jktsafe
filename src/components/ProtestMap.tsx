@@ -44,8 +44,8 @@ interface Event {
 }
 
 export default function ProtestMap() {
-  const mapContainer = useRef<any>(null);
-  const map = useRef<mapboxgl.Map | any>(null);
+  const mapContainer = useRef<HTMLDivElement>(null);
+  const map = useRef<mapboxgl.Map | null>(null);
   const [scrapingStatus, setScrapingStatus] = useState<'idle' | 'scraping' | 'completed' | 'error'>('idle');
 
   const [events, setEvents] = useState<Event[]>([]);
@@ -56,6 +56,34 @@ export default function ProtestMap() {
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const [fabMenuOpen, setFabMenuOpen] = useState<boolean>(false);
   const [nextUpdateTime, setNextUpdateTime] = useState<string>('Calculating...');
+  const [mapStyle, setMapStyle] = useState<string>('dark-v11');
+
+  // Available Mapbox styles
+  const mapboxStyles = [
+    { id: 'dark-v11', name: '🌕 Dark', emoji: '🌕', isCustom: false },
+    { id: 'edwardtanoto12/cmf13yyv601kp01pj9fkbgd1g', name: '🌃 Night City', emoji: '🌃', isCustom: true },
+  ];
+
+  // Function to change map style
+  const changeMapStyle = (styleId: string) => {
+    if (map.current && styleId !== mapStyle) {
+      setMapStyle(styleId);
+      
+      // Check if it's a custom style or standard Mapbox style
+      const style = mapboxStyles.find(s => s.id === styleId);
+      const styleUrl = style?.isCustom 
+        ? `mapbox://styles/${styleId}` 
+        : `mapbox://styles/mapbox/${styleId}`;
+      
+      map.current.setStyle(styleUrl);
+      
+      // Re-add markers after style change and reset zoom limits
+      map.current.once('styledata', () => {
+        // Ensure consistent zoom limits across all styles
+        updateMapMarkers();
+      });
+    }
+  };
 
   // Function to fetch events from database
   const fetchEvents = async (customTimeFilter?: number) => {
@@ -599,9 +627,15 @@ export default function ProtestMap() {
 
     mapboxgl.accessToken = token;
 
+    // Get the initial style URL based on whether it's custom or standard
+    const initialStyle = mapboxStyles.find(s => s.id === mapStyle);
+    const initialStyleUrl = initialStyle?.isCustom 
+      ? `mapbox://styles/${mapStyle}` 
+      : `mapbox://styles/mapbox/${mapStyle}`;
+
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
-      style: "mapbox://styles/mapbox/dark-v11",
+      style: initialStyleUrl,
       center: [106.8456, -6.2088], // Center on Jakarta
       zoom: 11,
       attributionControl: false
@@ -1141,6 +1175,49 @@ export default function ProtestMap() {
               {loading ? '⏳' : '🔄'}
             </button>
 
+            {/* Map Style FAB */}
+            <button
+              onClick={() => {
+                // Cycle through map styles
+                const currentIndex = mapboxStyles.findIndex(style => style.id === mapStyle);
+                const nextIndex = (currentIndex + 1) % mapboxStyles.length;
+                changeMapStyle(mapboxStyles[nextIndex].id);
+                // Keep FAB menu open when style is changed
+              }}
+              style={{
+                width: '48px',
+                height: '48px',
+                borderRadius: '24px',
+                backgroundColor: 'rgba(34, 197, 94, 0.9)',
+                border: '1px solid rgba(255, 255, 255, 0.2)',
+                color: '#ffffff',
+                cursor: 'pointer',
+                fontSize: '18px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                boxShadow: fabMenuOpen ? '0 4px 12px rgba(34, 197, 94, 0.4)' : '0 0 0 rgba(34, 197, 94, 0)',
+                transition: 'all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
+                transitionDelay: fabMenuOpen ? '0.1s' : '0s',
+                transform: fabMenuOpen ? 'translateX(0) scale(1)' : 'translateX(20px) scale(0.8)',
+                opacity: fabMenuOpen ? 1 : 0,
+                visibility: fabMenuOpen ? 'visible' : 'hidden'
+              }}
+              onMouseEnter={(e) => {
+                if (fabMenuOpen) {
+                  e.currentTarget.style.transform = 'translateX(0) scale(1.1)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = fabMenuOpen ? 'translateX(0) scale(1)' : 'translateX(20px) scale(0.8)';
+              }}
+            >
+              {(() => {
+                const currentStyle = mapboxStyles.find(style => style.id === mapStyle);
+                return currentStyle ? currentStyle.emoji : '🌙';
+              })()}
+            </button>
+
             {/* Filter Menu FAB */}
             <button
               onClick={() => {
@@ -1295,6 +1372,50 @@ export default function ProtestMap() {
               Refresh
             </>
           )}
+        </button>
+
+        {/* Map Style Selector Button */}
+        <button
+          onClick={() => {
+            // Cycle through map styles
+            const currentIndex = mapboxStyles.findIndex(style => style.id === mapStyle);
+            const nextIndex = (currentIndex + 1) % mapboxStyles.length;
+            changeMapStyle(mapboxStyles[nextIndex].id);
+          }}
+          style={{
+            backgroundColor: 'rgba(0, 0, 0, 0.85)',
+            backdropFilter: 'blur(10px)',
+            color: '#ffffff',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            borderRadius: '16px',
+            padding: '12px 16px',
+            fontSize: '14px',
+            fontWeight: '500',
+            cursor: 'pointer',
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)',
+            transition: 'all 0.3s ease',
+            minWidth: '140px',
+            outline: 'none',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px'
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.95)';
+            e.currentTarget.style.transform = 'translateY(-2px)';
+            e.currentTarget.style.boxShadow = '0 6px 25px rgba(0, 0, 0, 0.4)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = 'rgba(0, 0, 0, 0.85)';
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 4px 20px rgba(0, 0, 0, 0.3)';
+          }}
+        >
+          {(() => {
+            const currentStyle = mapboxStyles.find(style => style.id === mapStyle);
+            return currentStyle ? `${currentStyle.emoji} ${currentStyle.name.split(' ').slice(1).join(' ')}` : '🌙 Dark';
+          })()}
         </button>
 
         {/* Event Filter Toggle Button */}

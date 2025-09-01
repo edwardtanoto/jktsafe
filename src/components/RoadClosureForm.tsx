@@ -5,11 +5,11 @@ import { useState } from 'react';
 interface LocationSuggestion {
   place_name: string;
   center: [number, number];
-  context?: any[];
+  context?: Record<string, unknown>[];
   displayName?: string;
   coordinates: [number, number]; // Required for Google Maps
-  properties?: any;
-  geometry?: any;
+  properties?: Record<string, unknown>;
+  geometry?: Record<string, unknown>;
   place_id?: string; // Google Places API
   structured_formatting?: {
     main_text: string;
@@ -56,7 +56,7 @@ export default function RoadClosureForm() {
       if (data.success && data.status === 'OK') {
         // Get place details for each prediction to get coordinates
         const suggestionsWithDetails = await Promise.all(
-          data.predictions.slice(0, 8).map(async (prediction: any) => {
+          data.predictions.slice(0, 8).map(async (prediction: Record<string, unknown>) => {
             try {
               const detailsResponse = await fetch('/api/road-closures', {
                 method: 'PATCH',
@@ -112,7 +112,7 @@ export default function RoadClosureForm() {
   };
 
   // Create Google Maps-like display names
-  const getEnhancedDisplayName = (prediction: any) => {
+  const getEnhancedDisplayName = (prediction: Record<string, unknown>) => {
     // Google Places API structure
     if (prediction.structured_formatting) {
       const { main_text, secondary_text } = prediction.structured_formatting;

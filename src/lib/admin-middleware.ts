@@ -38,8 +38,8 @@ export function authenticateAdminRequest(request: NextRequest): { isValid: boole
 }
 
 // Middleware function for admin routes
-export function withAdminAuth(handler: Function) {
-  return async (request: NextRequest, ...args: any[]) => {
+export function withAdminAuth(handler: (request: NextRequest, ...args: unknown[]) => Promise<NextResponse>) {
+  return async (request: NextRequest, ...args: unknown[]) => {
     const auth = authenticateAdminRequest(request);
 
     if (!auth.isValid) {

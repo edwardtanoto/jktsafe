@@ -22,7 +22,7 @@ export interface TwitterTimeline {
   views: string;
   entities: TwitterEntities;
   user_info: TwitterUserInfo;
-  media: any;
+  media: Record<string, unknown>;
   in_reply_to_screen_name?: string;
   in_reply_to_status_id_str?: string;
   in_reply_to_user_id_str?: string;
@@ -30,9 +30,9 @@ export interface TwitterTimeline {
 }
 
 export interface TwitterEntities {
-  hashtags: any[];
-  symbols: any[];
-  timestamps?: any[];
+  hashtags: Record<string, unknown>[];
+  symbols: Record<string, unknown>[];
+  timestamps?: Record<string, unknown>[];
   urls: TwitterUrl[];
   user_mentions: TwitterUserMention[];
   media?: TwitterMedia[];
@@ -135,7 +135,7 @@ export interface TwitterUserInfo {
   avatar: string;
   verified: boolean;
   friends_count: number;
-  location: any;
+  location: Record<string, unknown>;
 }
 
 export interface TwitterQuoted {
@@ -160,7 +160,7 @@ export interface TwitterAuthor {
   name: string;
   screen_name: string;
   avatar: string;
-  blue_verified: any;
+  blue_verified: boolean | Record<string, unknown>;
 }
 
 export interface TwitterQuotedMedia {

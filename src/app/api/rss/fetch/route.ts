@@ -19,7 +19,7 @@ const ratelimit = new Ratelimit({
 export async function POST(request: NextRequest) {
   try {
     // Rate limiting
-    const ip = request.ip || 'anonymous';
+    const ip = request.headers.get('x-forwarded-for') || 'anonymous';
     const { success } = await ratelimit.limit(ip);
 
     if (!success) {
@@ -246,7 +246,7 @@ async function updateRSSMetrics(fetched: number, successful: number, failed: num
   }
 }
 
-async function getRSSMetrics(): Promise<any> {
+async function getRSSMetrics(): Promise<Record<string, unknown>> {
   try {
     const [totalFetched, totalProcessed, totalFailed, lastMetrics] = await Promise.all([
       redis.get('rss:total_fetched'),
@@ -256,10 +256,10 @@ async function getRSSMetrics(): Promise<any> {
     ]);
 
     return {
-      totalFetched: parseInt(totalFetched || '0'),
-      totalProcessed: parseInt(totalProcessed || '0'),
-      totalFailed: parseInt(totalFailed || '0'),
-      lastMetrics: lastMetrics ? JSON.parse(lastMetrics) : null
+      totalFetched: parseInt(String(totalFetched || '0')),
+      totalProcessed: parseInt(String(totalProcessed || '0')),
+      totalFailed: parseInt(String(totalFailed || '0')),
+      lastMetrics: lastMetrics ? JSON.parse(String(lastMetrics)) : null
     };
 
   } catch (error) {

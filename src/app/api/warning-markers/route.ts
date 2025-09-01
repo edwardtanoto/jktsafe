@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     console.log(`🔍 Fetching warning markers with filters: hours=${hours}, limit=${limit}, verified=${verified}, minConfidence=${minConfidence}`);
 
     // Build where clause
-    let whereClause: any = {
+    const whereClause: Record<string, unknown> = {
       AND: [
         { extractedLocation: { not: null } },
         { lat: { not: null } },
@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
       lat: marker.lat!,
       lng: marker.lng!,
       source: 'twitter',
-      url: `https://twitter.com/${(marker.userInfo as any)?.screen_name}/status/${marker.tweetId}`,
+      url: `https://twitter.com/${(marker.userInfo as Record<string, unknown>)?.screen_name}/status/${marker.tweetId}`,
       verified: marker.verified,
       type: 'warning',
       createdAt: marker.createdAt.toISOString(),

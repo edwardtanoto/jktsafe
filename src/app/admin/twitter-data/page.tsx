@@ -79,7 +79,7 @@ export default function TwitterDataPage() {
           🐦 Twitter Data Dashboard
         </h1>
         <p style={{ color: '#666', marginBottom: '20px' }}>
-          View and analyze Twitter data from "rencana demo" searches
+          View and analyze Twitter data from &quot;rencana demo&quot; searches
         </p>
 
         {/* Filter Buttons */}
@@ -151,7 +151,7 @@ export default function TwitterDataPage() {
                   marginBottom: '12px',
                   fontStyle: 'italic'
                 }}>
-                  "{tweet.text}"
+                  &quot;{tweet.text}&quot;
                 </div>
 
                 {/* Social Metrics */}

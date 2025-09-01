@@ -31,14 +31,14 @@ export async function POST(request: NextRequest) {
     }
 
     let processed = 0;
-    let errors: string[] = [];
+    const errors: string[] = [];
 
     for (const marker of pendingMarkers) {
       try {
         console.log(`🔍 Processing marker ${marker.id} (tweet: ${marker.tweetId})`);
 
         let needsUpdate = false;
-        let updateData: any = {};
+        const updateData: Record<string, unknown> = {};
 
         // Step 1: Extract location if not already done
         if (!marker.extractedLocation) {
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
           
           const locationResult = await extractLocationFromTweet(
             marker.text,
-            marker.userInfo as any
+            marker.userInfo as Record<string, unknown>
           );
 
           if (locationResult.success && locationResult.location) {
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
           console.log(`🌍 Geocoding location: "${locationToGeocode}"`);
           
           try {
-            const geocodeResult = await smartGeocodeLocation(locationToGeocode);
+            const geocodeResult = await smartGeocodeLocation(String(locationToGeocode));
             
             if (geocodeResult.success && geocodeResult.latitude && geocodeResult.longitude) {
               updateData.lat = geocodeResult.latitude;

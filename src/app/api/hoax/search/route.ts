@@ -44,7 +44,7 @@ interface HoaxSearchResult {
 export async function POST(request: NextRequest) {
   try {
     // Rate limiting
-    const ip = request.ip || 'anonymous';
+    const ip = request.headers.get('x-forwarded-for') || 'anonymous';
     const { success } = await ratelimit.limit(`${ip}:hoax_search`);
 
     if (!success) {
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body: SearchRequest = await request.json();
-    const { query, category, limit = 5, includeEmbeddings = false } = body;
+    const { query, category, limit = 5 } = body;
 
     if (!query || typeof query !== 'string' || query.trim().length < 2) {
       return NextResponse.json(
@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
       authorName: hoax.authorName || 'Unknown',
       sourceUrl: hoax.sourceUrl,
       publicationDate: hoax.publicationDate,
-      similarity: calculateSimilarityScore(queryEmbedding, hoax.embedding, index)
+      similarity: calculateSimilarityScore(queryEmbedding, hoax.embedding as number[] | null, index)
     }));
 
     // Filter by category if specified
@@ -229,7 +229,7 @@ function extractKeywords(query: string): string[] {
     .slice(0, 10); // Limit to 10 keywords
 }
 
-function calculateSimilarityScore(queryEmbedding: number[], hoaxEmbedding: any, index: number): number {
+function calculateSimilarityScore(queryEmbedding: number[], hoaxEmbedding: number[] | null, index: number): number {
   if (!hoaxEmbedding) return 0.5; // Default similarity for items without embeddings
 
   try {
@@ -284,7 +284,7 @@ export async function GET(request: NextRequest) {
       for (const category of categories) {
         const cacheKey = `hoax:stats:category:${category}`;
         const count = await redis.get(cacheKey);
-        categoryCounts[category] = parseInt(count || '0');
+        categoryCounts[category] = parseInt(String(count || '0'));
       }
 
       return NextResponse.json({
