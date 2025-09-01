@@ -14,14 +14,15 @@ model Event {
   lat               Float
   lng               Float
   source            String
-  url               String?
+  url               String?                @unique
   verified          Boolean                @default(false)
   type              String
   extractedLocation String?
   googleMapsUrl     String?
+  originalCreatedAt DateTime?              // Original creation time from source (TikTok video, tweet, etc.)
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
-  embedding         Unsupported("vector")?
+  // embedding         Unsupported("vector")? // Temporarily disabled - requires pgvector extension
 
   @@map("events")
 }
@@ -39,4 +40,27 @@ model GeocodeCache {
   usageCount       Int      @default(1)
 
   @@map("geocode_cache")
+}
+
+model WarningMarker {
+  id               Int      @id @default(autoincrement())
+  tweetId          String   @unique
+  text             String
+  createdAt        DateTime
+  bookmarks        Int      @default(0)
+  favorites        Int      @default(0)
+  retweets         Int      @default(0)
+  views            String   @default("0")
+  quotes           Int      @default(0)
+  replies          Int      @default(0)
+  userInfo         Json
+  extractedLocation String?
+  lat              Float?
+  lng              Float?
+  confidenceScore  Float?
+  verified         Boolean  @default(false)
+  processedAt      DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@map("warning_markers")
 }

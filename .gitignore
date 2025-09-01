@@ -60,3 +60,6 @@ migrate-*.js
 import-*.js
 generate-*.js
 fix-*.sql
+prisma/dev.db
+exports/prisma/dev.db
+exports/
