@@ -30,12 +30,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get the base URL for internal API calls
-    const baseUrl = process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : 'http://localhost:3000';
+    // Get the base URL for internal API calls - use request origin for reliability
+    const baseUrl = request.nextUrl.origin || 
+                   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
 
     console.log('🔗 Calling main scraping endpoint...');
+    console.log(`📍 Target URL: ${baseUrl}/api/scrape/tiktok`);
     console.log('📋 Request headers being sent:');
     console.log(`  - x-internal-cron: true`);
     console.log(`  - x-scrape-secret: ${scrapeSecret ? 'Configured' : 'Missing'}`);
@@ -52,7 +52,8 @@ export async function GET(request: NextRequest) {
           'x-scrape-secret': scrapeSecret, // Provide authentication
           'user-agent': 'vercel-cron/1.0' // Identify as cron job
         },
-        // Increase timeout for scraping operations
+        // Increase timeout for scraping operations and avoid caching
+        cache: 'no-store',
         signal: AbortSignal.timeout(25 * 60 * 1000) // 25 minutes timeout
       });
     } catch (fetchError) {

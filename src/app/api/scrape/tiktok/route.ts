@@ -276,24 +276,28 @@ export async function GET(request: NextRequest) {
   console.log(`  - x-scrape-secret: ${scrapeSecret ? 'Present' : 'Missing'}`);
   console.log(`  - Environment SCRAPE_SECRET: ${process.env.SCRAPE_SECRET ? 'Set' : 'Missing'}`);
 
-  // Authenticate scrape request (both internal and external calls need valid secret)
-  console.log(`🔐 ${isInternalCronCall ? 'Internal cron' : 'External'} request - checking authentication...`);
-  const auth = authenticateScrapeRequest(request);
-  if (!auth.isValid) {
-    console.log(`❌ Authentication failed: ${auth.error}`);
-    return NextResponse.json(
-      {
-        success: false,
-        error: auth.error,
-        message: 'Authentication required for scraping operations'
-      },
-      {
-        status: 401,
-        headers: getCorsHeaders()
-      }
-    );
+  // Skip authentication for internal cron calls, authenticate external calls
+  if (!isInternalCronCall) {
+    console.log(`🔐 External request - checking authentication...`);
+    const auth = authenticateScrapeRequest(request);
+    if (!auth.isValid) {
+      console.log(`❌ Authentication failed: ${auth.error}`);
+      return NextResponse.json(
+        {
+          success: false,
+          error: auth.error,
+          message: 'Authentication required for scraping operations'
+        },
+        {
+          status: 401,
+          headers: getCorsHeaders()
+        }
+      );
+    }
+    console.log(`✅ External request authenticated`);
+  } else {
+    console.log(`🔐 Internal cron call - skipping authentication`);
   }
-  console.log(`✅ ${isInternalCronCall ? 'Internal cron' : 'External'} request authenticated`);
 
   console.log('🔐 Scrape request authenticated successfully');
 
