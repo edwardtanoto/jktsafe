@@ -98,14 +98,8 @@ export class TurnBackHoaxFetcher {
     error?: string;
   }> {
     try {
-      // Smart change detection - check if we should skip this fetch
-      console.log('🔍 Checking if fetch should be skipped...');
-      const shouldSkip = await this.shouldSkipFetch();
-      if (shouldSkip) {
-        console.log('⏭️  Skipping fetch - no changes detected or too recent');
-        return { success: true, newItems: 0 };
-      }
-      console.log('✅ Proceeding with RSS fetch...');
+      // TEMPORARY: Force processing to debug the issue
+      console.log('🚀 FORCE MODE: Always processing RSS items (skip logic disabled)');
 
       // Get last processed GUID from cache
       const lastGuid = await this.redis.get('turnbackhoax:last_guid') as string | null;
@@ -262,26 +256,17 @@ export class TurnBackHoaxFetcher {
       return [];
     }
 
-    // SIMPLE APPROACH: Get last processed timestamp instead of GUID
-    const lastProcessedTime = this.redis.get('turnbackhoax:last_processed_time') as Promise<string | null>;
+    console.log(`📊 FORCE MODE: Processing ALL ${items.length} RSS items (no filtering)`);
     
-    console.log(`📊 Processing ${items.length} RSS items...`);
+    // FORCE MODE: Take first 5 items to ensure we get something
+    const newItems = items.slice(0, 5);
     
-    // If no last processed time, take only the latest 3 items to avoid overwhelming
-    if (!lastGuid) {
-      console.log('🚀 First run - taking latest 3 items');
-      return items.slice(0, 3);
-    }
-
-    // BULLETPROOF: Just take the first 2 items from RSS feed 
-    // RSS feeds are typically in reverse chronological order (newest first)
-    const newItems = items.slice(0, 2);
-    
-    console.log(`✅ Taking ${newItems.length} latest items from RSS feed`);
+    console.log(`🔥 FORCING ${newItems.length} items to be processed`);
     newItems.forEach((item, index) => {
       const guid = this.extractGuid(item);
       const title = this.extractText(item.title);
-      console.log(`  ${index + 1}. ${guid} - ${title?.substring(0, 50)}...`);
+      const pubDate = item.pubDate;
+      console.log(`  ${index + 1}. ${guid} - ${title?.substring(0, 50)}... [${pubDate}]`);
     });
 
     return newItems;
