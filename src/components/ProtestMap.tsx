@@ -140,7 +140,8 @@ export default function ProtestMap() {
         eventsLoadedRef.current = true; // Mark events as loaded
         const warningCount = warningMarkersData.success ? warningMarkersData.warnings.length : 0;
         console.log(`📍 Loaded ${eventsData.events.length} events, ${roadClosuresData.roadClosures.length} road closures, and ${warningCount} warning markers from database`);
-        
+        console.log('🔍 DEBUG: Events loaded, calling ensureMarkersRender');
+
         // Try to render markers now that events are loaded
         ensureMarkersRender();
       } else {
@@ -221,87 +222,109 @@ export default function ProtestMap() {
     };
   };
 
-  // Enhanced function to ensure markers render properly on mobile
+    // Enhanced function to ensure markers render properly on mobile
   const ensureMarkersRender = () => {
-    if (!map.current || !mapLoadedRef.current || !eventsLoadedRef.current) {
+    console.log('🔍 DEBUG ensureMarkersRender called:', {
+      mapExists: !!map.current,
+      mapLoaded: mapLoadedRef.current,
+      eventsLoaded: eventsLoadedRef.current,
+      eventsCount: events.length,
+      isMobile,
+      initialMarkersRendered: initialMarkersRenderedRef.current,
+      styleLoaded: map.current ? map.current.isStyleLoaded() : 'no map'
+    });
+
+    // More lenient conditions - only require map to exist and be loaded
+    if (!map.current || !mapLoadedRef.current) {
+      console.log('⏳ DEBUG: Skipping ensureMarkersRender - map not ready');
       return;
     }
-    
-    // Use a more aggressive retry approach for mobile
-    if (isMobile && !initialMarkersRenderedRef.current) {
-      setRenderingMarkers(true);
-      console.log('📱 Mobile detected: Using enhanced marker rendering...');
-      
-      // Multiple retry mechanisms for mobile
-      const attemptRender = () => {
-        if (map.current && map.current.isStyleLoaded() && events.length > 0) {
-          updateMapMarkers();
-          initialMarkersRenderedRef.current = true;
-          setRenderingMarkers(false);
-          console.log('✅ Mobile markers rendered successfully');
-        } else if (!retryScheduledRef.current) {
-          retryScheduledRef.current = true;
-          
-          // Try multiple events for mobile compatibility
-          const events = ['idle', 'sourcedata', 'styledata'];
-          let eventFired = false;
-          
-          const cleanup = () => {
-            events.forEach(eventName => {
-              if (map.current) {
-                map.current.off(eventName, handler);
-              }
-            });
-            retryScheduledRef.current = false;
-          };
-          
-          const handler = () => {
-            if (!eventFired && map.current && map.current.isStyleLoaded()) {
-              eventFired = true;
-              cleanup();
-              setTimeout(() => {
-                if (map.current && events.length > 0) {
-                  updateMapMarkers();
-                  initialMarkersRenderedRef.current = true;
-                  setRenderingMarkers(false);
-                  console.log('✅ Mobile markers rendered after retry');
-                }
-              }, 100); // Small delay for mobile
-            }
-          };
-          
+
+    // If events aren't loaded yet, just wait for them
+    if (!eventsLoadedRef.current || events.length === 0) {
+      console.log('⚠️ DEBUG: Events not ready yet, will retry when events load');
+      return;
+    }
+
+    // Always try to render markers when we have both map and events ready
+    console.log('✅ DEBUG: Both map and events ready, proceeding with marker render');
+    setRenderingMarkers(true);
+
+    // Use a more aggressive retry approach for both mobile and desktop
+    const attemptRender = () => {
+      if (map.current && map.current.isStyleLoaded() && events.length > 0) {
+        console.log('✅ DEBUG: Direct render condition met, calling updateMapMarkers');
+        updateMapMarkers();
+        initialMarkersRenderedRef.current = true;
+        setRenderingMarkers(false);
+        console.log('✅ Markers rendered successfully');
+      } else if (!retryScheduledRef.current) {
+        console.log('⏳ DEBUG: Setting up retry listeners');
+        retryScheduledRef.current = true;
+
+        // Try multiple events for compatibility
+        const events = ['idle', 'sourcedata', 'styledata'];
+        let eventFired = false;
+
+        const cleanup = () => {
           events.forEach(eventName => {
             if (map.current) {
-              map.current.once(eventName, handler);
+              map.current.off(eventName, handler);
             }
           });
-          
-          // Fallback timeout for mobile
-          setTimeout(() => {
-            if (!eventFired) {
-              cleanup();
+          retryScheduledRef.current = false;
+        };
+
+        const handler = () => {
+          if (!eventFired && map.current && map.current.isStyleLoaded()) {
+            eventFired = true;
+            console.log('🎯 DEBUG: Map event fired, attempting render');
+            cleanup();
+            setTimeout(() => {
               if (map.current && events.length > 0) {
                 updateMapMarkers();
                 initialMarkersRenderedRef.current = true;
                 setRenderingMarkers(false);
-                console.log('✅ Mobile markers rendered via fallback timeout');
+                console.log('✅ Markers rendered after retry');
               }
+            }, isMobile ? 150 : 50); // Slightly longer delay for mobile
+          }
+        };
+
+        events.forEach(eventName => {
+          if (map.current) {
+            map.current.once(eventName, handler);
+          }
+        });
+
+        // Fallback timeout
+        setTimeout(() => {
+          if (!eventFired) {
+            console.log('⏰ DEBUG: Fallback timeout reached');
+            cleanup();
+            if (map.current && events.length > 0) {
+              updateMapMarkers();
+              initialMarkersRenderedRef.current = true;
+              setRenderingMarkers(false);
+              console.log('✅ Markers rendered via fallback timeout');
             }
-          }, 2000);
-        }
-      };
-      
-      attemptRender();
-    } else {
-      // Desktop or already rendered
-      updateMapMarkers();
-    }
+          }
+        }, isMobile ? 3000 : 1500); // Longer timeout for mobile
+      }
+    };
+
+    attemptRender();
   };
 
   // Function to update map markers
   const updateMapMarkers = () => {
-    if (!map.current) return;
+    console.log('🎯 DEBUG: updateMapMarkers called');
+    if (!map.current) {
+      console.log('❌ DEBUG: No map instance');
+      return;
+    }
     if (!map.current.isStyleLoaded()) {
+      console.log('⏳ DEBUG: Map style not loaded yet');
       // Schedule a one-shot retry when the map becomes idle to avoid race on mobile
       if (!retryScheduledRef.current) {
         retryScheduledRef.current = true;
@@ -331,11 +354,14 @@ export default function ProtestMap() {
         break;
     }
     const eventData = createEventGeoJSON(filteredEvents);
+    console.log('📊 DEBUG: Created eventData with', filteredEvents.length, 'events');
 
     // Update or create the events source
     if (map.current.getSource('events')) {
+      console.log('🔄 DEBUG: Updating existing events source');
       (map.current.getSource('events') as any).setData(eventData);
     } else {
+      console.log('🆕 DEBUG: Creating new events source and layers');
       // Add source with clustering enabled
       map.current.addSource('events', {
         type: 'geojson',
@@ -759,6 +785,7 @@ export default function ProtestMap() {
     map.current.on('load', () => {
       console.log('🗺️ Map loaded, waiting for events data...');
       mapLoadedRef.current = true;
+      console.log('🔍 DEBUG: Map loaded, calling ensureMarkersRender');
       // Use enhanced render function instead of direct updateMapMarkers
       ensureMarkersRender();
     });
@@ -781,6 +808,43 @@ export default function ProtestMap() {
 
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // Fallback mechanism to ensure markers render even if other mechanisms fail
+  useEffect(() => {
+    if (events.length > 0) {
+      // Set up a fallback check every 2 seconds for the first 10 seconds
+      const maxChecks = 5;
+      let checkCount = 0;
+
+      const checkInterval = setInterval(() => {
+        checkCount++;
+        console.log(`🔍 DEBUG: Fallback check ${checkCount}/${maxChecks}`);
+
+        if (checkCount >= maxChecks) {
+          clearInterval(checkInterval);
+          return;
+        }
+
+        // Only check if both map and events are loaded
+        if (mapLoadedRef.current && eventsLoadedRef.current && map.current && map.current.isStyleLoaded()) {
+          const layers = map.current.getStyle().layers || [];
+          const hasMarkerLayers = layers.some(layer =>
+            ['clusters', 'cluster-count', 'protest-circles', 'road-closure-circles', 'warning-circles', 'event-emoji'].includes(layer.id)
+          );
+
+          if (!hasMarkerLayers && !initialMarkersRenderedRef.current) {
+            console.log('⚠️ DEBUG: Fallback detected missing markers, forcing render');
+            ensureMarkersRender();
+          } else if (hasMarkerLayers) {
+            console.log('✅ DEBUG: Fallback confirmed markers exist');
+            clearInterval(checkInterval);
+          }
+        }
+      }, 2000);
+
+      return () => clearInterval(checkInterval);
+    }
+  }, [events.length]); // Only depend on events.length
 
   // Calculate next update time
   useEffect(() => {
@@ -943,10 +1007,22 @@ export default function ProtestMap() {
 
   // Update map markers when events change or filter changes
   useEffect(() => {
+    console.log('🔍 DEBUG: Events or filter changed, events.length:', events.length, 'eventFilter:', eventFilter);
     if (events.length > 0) {
+      console.log('🔍 DEBUG: Events exist, calling ensureMarkersRender from useEffect');
       ensureMarkersRender();
+    } else {
+      console.log('⚠️ DEBUG: No events yet, skipping marker render');
     }
   }, [events, eventFilter]);
+
+  // Additional effect to handle the case where map loads first, then events load
+  useEffect(() => {
+    if (mapLoadedRef.current && eventsLoadedRef.current && events.length > 0 && !initialMarkersRenderedRef.current) {
+      console.log('🔍 DEBUG: Both map and events are ready, triggering marker render');
+      ensureMarkersRender();
+    }
+  }, [events.length]); // Only depend on events.length to avoid ref dependency issues
 
   const getStatusColor = () => {
     switch (scrapingStatus) {
