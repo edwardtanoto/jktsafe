@@ -99,16 +99,36 @@ export class TurnBackHoaxFetcher {
   }> {
     try {
       // Smart change detection - check if we should skip this fetch
+      console.log('🔍 Checking if fetch should be skipped...');
       const shouldSkip = await this.shouldSkipFetch();
       if (shouldSkip) {
-        console.log('⏭️  Skipping fetch - no changes detected');
+        console.log('⏭️  Skipping fetch - no changes detected or too recent');
         return { success: true, newItems: 0 };
       }
+      console.log('✅ Proceeding with RSS fetch...');
 
       // Get last processed GUID from cache
       const lastGuid = await this.redis.get('turnbackhoax:last_guid') as string | null;
+      console.log(`📋 Last processed GUID: ${lastGuid || 'None (first run)'}`);
+
+      // Check if last GUID is too old (more than 7 days) and clear it
+      if (lastGuid) {
+        const lastGuidTime = await this.redis.get('turnbackhoax:last_guid_timestamp') as string | null;
+        if (lastGuidTime) {
+          const timeSinceLastGuid = Date.now() - new Date(lastGuidTime).getTime();
+          const daysSinceLastGuid = timeSinceLastGuid / (1000 * 60 * 60 * 24);
+          
+          if (daysSinceLastGuid > 7) {
+            console.log(`🧹 Last GUID is ${daysSinceLastGuid.toFixed(1)} days old - clearing to prevent stuck state`);
+            await this.redis.del('turnbackhoax:last_guid');
+            await this.redis.del('turnbackhoax:last_guid_timestamp');
+            // Continue with lastGuid as null
+          }
+        }
+      }
 
       // Fetch RSS feed
+      console.log('📡 Fetching RSS feed...');
       const feedData = await this.fetchFeed();
 
       if (!feedData) {
@@ -116,19 +136,37 @@ export class TurnBackHoaxFetcher {
       }
 
       // Parse items
+      console.log('📄 Parsing RSS items...');
       const items = this.parseItems(feedData);
+      console.log(`📊 Total items in feed: ${items.length}`);
 
       // Filter new items
+      console.log('🔍 Filtering new items...');
       const newItems = this.filterNewItems(items, lastGuid);
 
-      console.log(`Found ${newItems.length} new items out of ${items.length} total items`);
+      console.log(`📈 Found ${newItems.length} new items out of ${items.length} total items`);
+      
+      if (newItems.length > 0) {
+        console.log('🆕 New items found:');
+        newItems.slice(0, 3).forEach((item, index) => {
+          const guid = this.extractGuid(item);
+          const title = this.extractText(item.title);
+          console.log(`  ${index + 1}. ${guid} - ${title?.substring(0, 50)}...`);
+        });
+      }
 
       if (newItems.length > 0) {
         // Cache new items for processing
         await this.cacheNewItems(newItems);
 
         // Update last processed GUID
-        await this.redis.set('turnbackhoax:last_guid', newItems[0].guid, {
+        const firstNewItemGuid = this.extractGuid(newItems[0]);
+        await this.redis.set('turnbackhoax:last_guid', firstNewItemGuid, {
+          ex: 86400 * 30 // 30 days
+        });
+        
+        // Store timestamp for GUID age tracking
+        await this.redis.set('turnbackhoax:last_guid_timestamp', new Date().toISOString(), {
           ex: 86400 * 30 // 30 days
         });
 
@@ -220,20 +258,41 @@ export class TurnBackHoaxFetcher {
 
   private filterNewItems(items: RSSItem[], lastGuid: string | null): RSSItem[] {
     if (!lastGuid || !items.length) {
+      console.log('🔄 No last GUID or no items - returning all items');
       return items;
     }
 
+    console.log(`🔍 Filtering items against last GUID: ${lastGuid}`);
+    
     const newItems: RSSItem[] = [];
-    for (const item of items) {
+    let foundLastGuid = false;
+    
+    // Process all items to find new ones
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
       const itemGuid = this.extractGuid(item);
-      if (itemGuid && itemGuid !== lastGuid) {
+      
+      if (itemGuid === lastGuid) {
+        foundLastGuid = true;
+        console.log(`✅ Found last processed GUID at position ${i}`);
+        // Don't break here - continue to check if there are newer items after this one
+        continue;
+      }
+      
+      // If we haven't found the last GUID yet, or if we found it and this item comes before it
+      // (assuming RSS items are in reverse chronological order), this is a new item
+      if (!foundLastGuid) {
         newItems.push(item);
-      } else {
-        // Since items are in reverse chronological order, we can stop here
-        break;
+        console.log(`🆕 New item found: ${itemGuid} (before last GUID)`);
       }
     }
+    
+    if (!foundLastGuid) {
+      console.log('⚠️  Last GUID not found in current feed - all items are considered new');
+      return items; // If last GUID not found, all items are new
+    }
 
+    console.log(`📊 Filtered ${newItems.length} new items from ${items.length} total items`);
     return newItems;
   }
 
@@ -302,8 +361,11 @@ export class TurnBackHoaxFetcher {
       const lastFetch = await this.redis.get('turnbackhoax:last_successful_fetch') as string | null;
       const lastProcessedGuid = await this.redis.get('turnbackhoax:last_guid') as string | null;
 
+      console.log(`🕒 Last successful fetch: ${lastFetch || 'Never'}`);
+      console.log(`🔖 Last processed GUID: ${lastProcessedGuid || 'None'}`);
+
       if (!lastFetch) {
-        // First run, don't skip
+        console.log('🚀 First run detected - proceeding with fetch');
         return false;
       }
 
@@ -311,9 +373,11 @@ export class TurnBackHoaxFetcher {
       const now = new Date();
       const timeSinceLastFetch = now.getTime() - lastFetchTime.getTime();
 
-      // If it's been less than 30 minutes since last successful fetch, skip
+      // If it's been less than 15 minutes since last successful fetch, skip
       // This prevents over-fetching during development/testing
-      if (timeSinceLastFetch < 30 * 60 * 1000) {
+      // Reduced from 30 minutes to allow cron jobs that run every 20 minutes
+      if (timeSinceLastFetch < 15 * 60 * 1000) {
+        console.log(`⏭️  Skipping fetch - only ${Math.floor(timeSinceLastFetch / (1000 * 60))} minutes since last fetch`);
         return true;
       }
 
@@ -409,3 +473,4 @@ export class TurnBackHoaxFetcher {
 
 // Export singleton instance
 export const rssFetcher = new TurnBackHoaxFetcher();
+
