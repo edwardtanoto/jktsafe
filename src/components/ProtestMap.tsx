@@ -46,6 +46,7 @@ interface Event {
 export default function ProtestMap() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
+  const retryScheduledRef = useRef<boolean>(false);
   const [scrapingStatus, setScrapingStatus] = useState<'idle' | 'scraping' | 'completed' | 'error'>('idle');
 
   const [events, setEvents] = useState<Event[]>([]);
@@ -214,7 +215,18 @@ export default function ProtestMap() {
 
   // Function to update map markers
   const updateMapMarkers = () => {
-    if (!map.current || !map.current.isStyleLoaded()) return;
+    if (!map.current) return;
+    if (!map.current.isStyleLoaded()) {
+      // Schedule a one-shot retry when the map becomes idle to avoid race on mobile
+      if (!retryScheduledRef.current) {
+        retryScheduledRef.current = true;
+        map.current.once('idle', () => {
+          retryScheduledRef.current = false;
+          updateMapMarkers();
+        });
+      }
+      return;
+    }
 
     // Filter events based on eventFilter state
     let filteredEvents = events;
@@ -661,7 +673,8 @@ export default function ProtestMap() {
 
     map.current.on('load', () => {
       console.log('🗺️ Map loaded, waiting for events data...');
-      // Map markers will be added when events are fetched
+      // Ensure markers attempt to render as soon as style is ready
+      updateMapMarkers();
     });
 
     return () => {
