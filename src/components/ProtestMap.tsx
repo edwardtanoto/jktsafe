@@ -47,6 +47,9 @@ export default function ProtestMap() {
   const mapContainer = useRef<HTMLDivElement>(null);
   const map = useRef<mapboxgl.Map | null>(null);
   const retryScheduledRef = useRef<boolean>(false);
+  const mapLoadedRef = useRef<boolean>(false);
+  const eventsLoadedRef = useRef<boolean>(false);
+  const initialMarkersRenderedRef = useRef<boolean>(false);
   const [scrapingStatus, setScrapingStatus] = useState<'idle' | 'scraping' | 'completed' | 'error'>('idle');
 
   const [events, setEvents] = useState<Event[]>([]);
@@ -58,6 +61,7 @@ export default function ProtestMap() {
   const [fabMenuOpen, setFabMenuOpen] = useState<boolean>(false);
   const [nextUpdateTime, setNextUpdateTime] = useState<string>('Calculating...');
   const [mapStyle, setMapStyle] = useState<string>('dark-v11');
+  const [renderingMarkers, setRenderingMarkers] = useState<boolean>(false);
 
   // Available Mapbox styles
   const mapboxStyles = [
@@ -133,8 +137,12 @@ export default function ProtestMap() {
         ];
 
         setEvents(allEvents);
+        eventsLoadedRef.current = true; // Mark events as loaded
         const warningCount = warningMarkersData.success ? warningMarkersData.warnings.length : 0;
         console.log(`📍 Loaded ${eventsData.events.length} events, ${roadClosuresData.roadClosures.length} road closures, and ${warningCount} warning markers from database`);
+        
+        // Try to render markers now that events are loaded
+        ensureMarkersRender();
       } else {
         throw new Error(eventsData.error || roadClosuresData.error || 'Failed to fetch data');
       }
@@ -211,6 +219,83 @@ export default function ProtestMap() {
         }
       }))
     };
+  };
+
+  // Enhanced function to ensure markers render properly on mobile
+  const ensureMarkersRender = () => {
+    if (!map.current || !mapLoadedRef.current || !eventsLoadedRef.current) {
+      return;
+    }
+    
+    // Use a more aggressive retry approach for mobile
+    if (isMobile && !initialMarkersRenderedRef.current) {
+      setRenderingMarkers(true);
+      console.log('📱 Mobile detected: Using enhanced marker rendering...');
+      
+      // Multiple retry mechanisms for mobile
+      const attemptRender = () => {
+        if (map.current && map.current.isStyleLoaded() && events.length > 0) {
+          updateMapMarkers();
+          initialMarkersRenderedRef.current = true;
+          setRenderingMarkers(false);
+          console.log('✅ Mobile markers rendered successfully');
+        } else if (!retryScheduledRef.current) {
+          retryScheduledRef.current = true;
+          
+          // Try multiple events for mobile compatibility
+          const events = ['idle', 'sourcedata', 'styledata'];
+          let eventFired = false;
+          
+          const cleanup = () => {
+            events.forEach(eventName => {
+              if (map.current) {
+                map.current.off(eventName, handler);
+              }
+            });
+            retryScheduledRef.current = false;
+          };
+          
+          const handler = () => {
+            if (!eventFired && map.current && map.current.isStyleLoaded()) {
+              eventFired = true;
+              cleanup();
+              setTimeout(() => {
+                if (map.current && events.length > 0) {
+                  updateMapMarkers();
+                  initialMarkersRenderedRef.current = true;
+                  setRenderingMarkers(false);
+                  console.log('✅ Mobile markers rendered after retry');
+                }
+              }, 100); // Small delay for mobile
+            }
+          };
+          
+          events.forEach(eventName => {
+            if (map.current) {
+              map.current.once(eventName, handler);
+            }
+          });
+          
+          // Fallback timeout for mobile
+          setTimeout(() => {
+            if (!eventFired) {
+              cleanup();
+              if (map.current && events.length > 0) {
+                updateMapMarkers();
+                initialMarkersRenderedRef.current = true;
+                setRenderingMarkers(false);
+                console.log('✅ Mobile markers rendered via fallback timeout');
+              }
+            }
+          }, 2000);
+        }
+      };
+      
+      attemptRender();
+    } else {
+      // Desktop or already rendered
+      updateMapMarkers();
+    }
   };
 
   // Function to update map markers
@@ -673,8 +758,9 @@ export default function ProtestMap() {
 
     map.current.on('load', () => {
       console.log('🗺️ Map loaded, waiting for events data...');
-      // Ensure markers attempt to render as soon as style is ready
-      updateMapMarkers();
+      mapLoadedRef.current = true;
+      // Use enhanced render function instead of direct updateMapMarkers
+      ensureMarkersRender();
     });
 
     return () => {
@@ -857,7 +943,9 @@ export default function ProtestMap() {
 
   // Update map markers when events change or filter changes
   useEffect(() => {
-    updateMapMarkers();
+    if (events.length > 0) {
+      ensureMarkersRender();
+    }
   }, [events, eventFilter]);
 
   const getStatusColor = () => {
@@ -1016,7 +1104,7 @@ export default function ProtestMap() {
                   fontSize: '11px',
                   color: '#9ca3af'
                 }}>
-                  {loading ? 'Loading events...' : error ? '❌ Error loading events' :  <div>Next update: {nextUpdateTime}</div>}
+                  {loading ? 'Loading events...' : error ? '❌ Error loading events' : renderingMarkers && isMobile ? '📱 Rendering markers...' : <div>Next update: {nextUpdateTime}</div>}
                 </div>
               )}
             </div>
@@ -1172,6 +1260,8 @@ export default function ProtestMap() {
             <button
               onClick={() => {
                 fetchEvents();
+                // Reset mobile render flag to force re-render
+                initialMarkersRenderedRef.current = false;
                 setFabMenuOpen(false);
               }}
               disabled={loading}
@@ -1350,7 +1440,11 @@ export default function ProtestMap() {
         }}>
         {/* Refresh Button */}
         <button
-          onClick={() => fetchEvents()}
+          onClick={() => {
+            fetchEvents();
+            // Reset mobile render flag to force re-render
+            initialMarkersRenderedRef.current = false;
+          }}
           disabled={loading}
           style={{
             backgroundColor: loading ? 'rgba(107, 114, 128, 0.8)' : 'rgba(0, 0, 0, 0.85)',
