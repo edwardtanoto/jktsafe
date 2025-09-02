@@ -13,7 +13,7 @@ const redis = new Redis({
 
 const ratelimit = new Ratelimit({
   redis,
-  limiter: Ratelimit.slidingWindow(10, '1 h'), // 10 requests per hour
+  limiter: Ratelimit.slidingWindow(60, '1 h'), // 60 requests per hour
 });
 
 export async function POST(request: NextRequest) {
@@ -30,10 +30,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Authenticate request (simple API key check)
+    // Allow cron jobs with special header authentication
     const authHeader = request.headers.get('authorization');
+    const cronHeader = request.headers.get('x-internal-cron');
+    const cronSecret = request.headers.get('x-rss-secret');
     const expectedKey = process.env.RSS_API_KEY;
+    const cronRssSecret = process.env.CRON_SECRET || expectedKey; // Fallback to RSS_API_KEY
 
-    if (!expectedKey || authHeader !== `Bearer ${expectedKey}`) {
+    // Check authentication - allow either Bearer token OR cron internal auth
+    const isAuthenticated =
+      (expectedKey && authHeader === `Bearer ${expectedKey}`) || // Normal API auth
+      (cronHeader === 'true' && cronSecret === cronRssSecret); // Cron job auth
+
+    if (!isAuthenticated) {
       return NextResponse.json(
         { success: false, error: 'Unauthorized' },
         { status: 401 }
@@ -207,7 +216,7 @@ export async function GET(request: NextRequest) {
         'GET /api/rss/fetch?action=stats': 'Processing statistics'
       },
       lastFetch: await redis.get('turnbackhoax:last_fetch'),
-      rateLimit: '10 requests per hour'
+      rateLimit: '60 requests per hour'
     });
 
   } catch (error) {

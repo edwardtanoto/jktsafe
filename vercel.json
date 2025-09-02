@@ -14,6 +14,9 @@
     },
     "src/app/api/rss/fetch/route.ts": {
       "maxDuration": 800
+    },
+    "src/app/api/rss/cron/route.ts": {
+      "maxDuration": 800
     }
   },
   "crons": [
@@ -26,8 +29,8 @@
       "schedule": "0 2,4,6,8,10 * * *"
     },
     {
-      "path": "/api/rss/fetch",
-      "schedule": "0 */2 * * *"
+      "path": "/api/rss/cron",
+      "schedule": "*/20 * * * *"
     }
   ],
   "env": {

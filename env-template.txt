@@ -35,3 +35,7 @@ SCRAPE_SECRET=your_secure_scrape_secret_here_please_change_this
 
 # Admin Access
 ADMIN_SECRET=your_secure_admin_secret_here_please_change_this
+
+# RSS API and Cron Jobs
+RSS_API_KEY=your_secure_rss_api_key_here
+VERCEL_AUTOMATION_BYPASS_SECRET=your_vercel_automation_bypass_secret_here
