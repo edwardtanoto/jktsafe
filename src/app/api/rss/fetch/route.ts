@@ -86,8 +86,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const newItems = JSON.parse(cachedItems as string);
-    console.log(`Processing ${newItems.length} cached items`);
+    let newItems;
+    try {
+      console.log('📋 Parsing cached items:', typeof cachedItems, cachedItems?.toString().substring(0, 100));
+      newItems = JSON.parse(cachedItems as string);
+      console.log(`✅ Successfully parsed ${newItems.length} cached items`);
+    } catch (parseError) {
+      console.error('❌ Failed to parse cached items:', parseError);
+      console.error('❌ Cached items content:', cachedItems);
+      return NextResponse.json(
+        { success: false, error: 'Failed to parse cached RSS items', step: 'cache-parse' },
+        { status: 500 }
+      );
+    }
 
     // Step 3: Parse items into hoax data
     const parsedHoaxes = [];
