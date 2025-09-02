@@ -98,8 +98,14 @@ export class TurnBackHoaxFetcher {
     error?: string;
   }> {
     try {
-      // TEMPORARY: Force processing to debug the issue
-      console.log('🚀 FORCE MODE: Always processing RSS items (skip logic disabled)');
+      // Smart change detection - check if we should skip this fetch
+      console.log('🔍 Checking if fetch should be skipped...');
+      const shouldSkip = await this.shouldSkipFetch();
+      if (shouldSkip) {
+        console.log('⏭️  Skipping fetch - no changes detected or too recent');
+        return { success: true, newItems: 0 };
+      }
+      console.log('✅ Proceeding with RSS fetch...');
 
       // Get last processed GUID from cache
       const lastGuid = await this.redis.get('turnbackhoax:last_guid') as string | null;
@@ -256,19 +262,36 @@ export class TurnBackHoaxFetcher {
       return [];
     }
 
-    console.log(`📊 FORCE MODE: Processing ALL ${items.length} RSS items (no filtering)`);
+    console.log(`📊 Processing ${items.length} RSS items...`);
     
-    // FORCE MODE: Take first 5 items to ensure we get something
-    const newItems = items.slice(0, 5);
-    
-    console.log(`🔥 FORCING ${newItems.length} items to be processed`);
-    newItems.forEach((item, index) => {
-      const guid = this.extractGuid(item);
-      const title = this.extractText(item.title);
-      const pubDate = item.pubDate;
-      console.log(`  ${index + 1}. ${guid} - ${title?.substring(0, 50)}... [${pubDate}]`);
-    });
+    // If no last GUID, take latest 3 items to avoid overwhelming
+    if (!lastGuid) {
+      console.log('🚀 First run - taking latest 3 items');
+      const newItems = items.slice(0, 3);
+      newItems.forEach((item, index) => {
+        const guid = this.extractGuid(item);
+        const title = this.extractText(item.title);
+        console.log(`  ${index + 1}. ${guid} - ${title?.substring(0, 50)}...`);
+      });
+      return newItems;
+    }
 
+    // Smart filtering: find items that come before the last processed GUID
+    const newItems: RSSItem[] = [];
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      const itemGuid = this.extractGuid(item);
+      
+      if (itemGuid === lastGuid) {
+        console.log(`✅ Found last processed GUID at position ${i} - stopping here`);
+        break;
+      }
+      
+      newItems.push(item);
+      console.log(`🆕 New item found: ${itemGuid}`);
+    }
+    
+    console.log(`📈 Found ${newItems.length} new items from ${items.length} total items`);
     return newItems;
   }
 

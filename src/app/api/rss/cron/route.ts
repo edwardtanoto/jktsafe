@@ -61,35 +61,31 @@ export async function GET(request: NextRequest) {
       throw new Error(`Failed to call RSS endpoint: ${fetchError instanceof Error ? fetchError.message : 'Unknown fetch error'}`);
     }
 
-    // Check if response is JSON before parsing
-    const contentType = response.headers.get('content-type');
+    // Parse response - always get text first, then try to parse as JSON
     let data: any;
 
     try {
-      if (contentType && contentType.includes('application/json')) {
-        data = await response.json();
-      } else {
-        // If not JSON, get text and try to extract error info
-        const textResponse = await response.text();
-        console.error('❌ Non-JSON response received:', textResponse.substring(0, 200));
+      const textResponse = await response.text();
+      console.log('📄 Raw response received:', textResponse.substring(0, 200));
 
-        // Try to parse as JSON anyway (in case content-type is wrong)
-        try {
-          data = JSON.parse(textResponse);
-        } catch {
-          // If parsing fails, create a structured error response
-          data = {
-            success: false,
-            error: `Invalid response format: ${response.status} ${response.statusText}`,
-            rawResponse: textResponse.substring(0, 100)
-          };
-        }
+      // Try to parse as JSON
+      try {
+        data = JSON.parse(textResponse);
+        console.log('✅ Successfully parsed JSON response');
+      } catch (jsonError) {
+        console.error('❌ JSON parsing failed:', jsonError);
+        console.error('❌ Full response:', textResponse);
+        data = {
+          success: false,
+          error: `JSON parsing failed: ${jsonError instanceof Error ? jsonError.message : 'Unknown parsing error'}`,
+          rawResponse: textResponse.substring(0, 200)
+        };
       }
-    } catch (parseError) {
-      console.error('❌ Failed to parse response:', parseError);
+    } catch (responseError) {
+      console.error('❌ Failed to read response:', responseError);
       data = {
         success: false,
-        error: 'Failed to parse response',
+        error: `Failed to read response: ${responseError instanceof Error ? responseError.message : 'Unknown response error'}`,
         status: response.status,
         statusText: response.statusText
       };

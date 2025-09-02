@@ -15,7 +15,7 @@ const prisma = new PrismaClient();
 // RSS Feed Configuration
 const RSS_CONFIG = {
   feedUrl: 'https://turnbackhoax.id/feed/',
-  userAgent: 'SafeJakarta-Bot/1.0 (+https://safe-jakarta.vercel.app)',
+  userAgent: 'SafeJakarta-Bot/1.0',
   maxRetries: 3,
   retryDelay: 5000
 };
@@ -224,9 +224,7 @@ async function populateHoaxes() {
     console.log(`📊 Currently have ${existingCount} hoaxes in database`);
 
     if (existingCount > 0) {
-      console.log('⚠️  Database already has hoaxes. Skipping population to avoid duplicates.');
-      console.log('💡 If you want to refresh data, clear the hoax_fact_checks table first.');
-      return;
+      console.log('📈 Database has existing hoaxes. Will add only NEW items (no duplicates).');
     }
 
     console.log('📡 Fetching RSS feed from TurnBackHoax.ID...');
