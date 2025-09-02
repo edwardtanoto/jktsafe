@@ -257,42 +257,33 @@ export class TurnBackHoaxFetcher {
   }
 
   private filterNewItems(items: RSSItem[], lastGuid: string | null): RSSItem[] {
-    if (!lastGuid || !items.length) {
-      console.log('🔄 No last GUID or no items - returning all items');
-      return items;
+    if (!items.length) {
+      console.log('📭 No items in RSS feed');
+      return [];
     }
 
-    console.log(`🔍 Filtering items against last GUID: ${lastGuid}`);
+    // SIMPLE APPROACH: Get last processed timestamp instead of GUID
+    const lastProcessedTime = this.redis.get('turnbackhoax:last_processed_time') as Promise<string | null>;
     
-    const newItems: RSSItem[] = [];
-    let foundLastGuid = false;
+    console.log(`📊 Processing ${items.length} RSS items...`);
     
-    // Process all items to find new ones
-    for (let i = 0; i < items.length; i++) {
-      const item = items[i];
-      const itemGuid = this.extractGuid(item);
-      
-      if (itemGuid === lastGuid) {
-        foundLastGuid = true;
-        console.log(`✅ Found last processed GUID at position ${i}`);
-        // Don't break here - continue to check if there are newer items after this one
-        continue;
-      }
-      
-      // If we haven't found the last GUID yet, or if we found it and this item comes before it
-      // (assuming RSS items are in reverse chronological order), this is a new item
-      if (!foundLastGuid) {
-        newItems.push(item);
-        console.log(`🆕 New item found: ${itemGuid} (before last GUID)`);
-      }
-    }
-    
-    if (!foundLastGuid) {
-      console.log('⚠️  Last GUID not found in current feed - all items are considered new');
-      return items; // If last GUID not found, all items are new
+    // If no last processed time, take only the latest 3 items to avoid overwhelming
+    if (!lastGuid) {
+      console.log('🚀 First run - taking latest 3 items');
+      return items.slice(0, 3);
     }
 
-    console.log(`📊 Filtered ${newItems.length} new items from ${items.length} total items`);
+    // BULLETPROOF: Just take the first 2 items from RSS feed 
+    // RSS feeds are typically in reverse chronological order (newest first)
+    const newItems = items.slice(0, 2);
+    
+    console.log(`✅ Taking ${newItems.length} latest items from RSS feed`);
+    newItems.forEach((item, index) => {
+      const guid = this.extractGuid(item);
+      const title = this.extractText(item.title);
+      console.log(`  ${index + 1}. ${guid} - ${title?.substring(0, 50)}...`);
+    });
+
     return newItems;
   }
 
@@ -373,10 +364,9 @@ export class TurnBackHoaxFetcher {
       const now = new Date();
       const timeSinceLastFetch = now.getTime() - lastFetchTime.getTime();
 
-      // If it's been less than 15 minutes since last successful fetch, skip
-      // This prevents over-fetching during development/testing
-      // Reduced from 30 minutes to allow cron jobs that run every 20 minutes
-      if (timeSinceLastFetch < 15 * 60 * 1000) {
+      // If it's been less than 5 minutes since last successful fetch, skip
+      // This prevents over-fetching but allows frequent updates
+      if (timeSinceLastFetch < 5 * 60 * 1000) {
         console.log(`⏭️  Skipping fetch - only ${Math.floor(timeSinceLastFetch / (1000 * 60))} minutes since last fetch`);
         return true;
       }
