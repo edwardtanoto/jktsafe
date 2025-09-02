@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
     let response: Response;
 
     try {
-      response = await fetch(`${baseUrl}/api/rss/fetch`, {
+      response = await fetch(`${baseUrl}/api/debug/rss-test`, {
         method: 'POST', // RSS fetch uses POST
         headers: {
           'x-internal-cron': 'true', // Mark this as an internal cron call

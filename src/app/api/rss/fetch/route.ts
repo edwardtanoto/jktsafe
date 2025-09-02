@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString()
     };
 
-    console.log('RSS processing complete:', response);
+    console.log('RSS processing complete - returning response');
     return NextResponse.json(response);
 
   } catch (error) {
