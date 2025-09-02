@@ -434,7 +434,7 @@ export default function ChatBot() {
                   border: '1px solid rgba(255, 255, 255, 0.2)',
                   backgroundColor: 'rgba(255, 255, 255, 0.1)',
                   color: '#ffffff',
-                  fontSize: isMobile ? '12px' : '14px',
+                  fontSize: isMobile ? '16px' : '14px',
                   outline: 'none',
                   fontFamily: 'inherit'
                 }}

@@ -1,7 +1,7 @@
 # Copy this file to .env.local and fill in your actual values
 
 # Database URLs - Production Setup
-DATABASE_URL_LOCAL="file:./dev.db"
+DATABASE_URL_LOCAL=your_neon_dev_database_url_here
 NEON_DATABASE_URL_DEV=your_neon_dev_database_url_here
 NEON_DATABASE_URL_PROD=your_neon_prod_database_url_here
 
@@ -23,6 +23,9 @@ RAPIDAPI_KEY_TWO=your_rapidapi_key_two_here
 RAPIDAPI_KEY_THREE=your_rapidapi_key_three_here
 RAPIDAPI_KEY_FOUR=your_rapidapi_key_four_here
 RAPIDAPI_KEY_FIVE=your_rapidapi_key_five_here
+
+# GMAP API (Better than SERP and Mapbox)
+NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=
 
 # SERP API (required for Google Maps geocoding)
 SERPAPI_KEY=your_serpapi_key_here
