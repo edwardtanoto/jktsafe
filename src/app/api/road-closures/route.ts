@@ -243,9 +243,12 @@ export async function GET(request: NextRequest) {
 
     // Only add time filter if hours parameter is provided
     if (hours !== null && hours > 0) {
-      where.createdAt = {
-        gte: new Date(Date.now() - hours * 60 * 60 * 1000)
-      };
+      const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000);
+      // Prefer originalCreatedAt when present; fall back to createdAt when originalCreatedAt is null
+      (where as any).OR = [
+        { originalCreatedAt: { gte: cutoff } },
+        { AND: [ { originalCreatedAt: null }, { createdAt: { gte: cutoff } } ] }
+      ];
     }
 
     // Note: We don't filter by severity/closureType since we keep it simple
@@ -253,9 +256,10 @@ export async function GET(request: NextRequest) {
 
     const roadClosures = await prisma.event.findMany({
       where,
-      orderBy: {
-        createdAt: 'desc'
-      },
+      orderBy: [
+        { originalCreatedAt: 'desc' },
+        { createdAt: 'desc' }
+      ],
       select: {
         id: true,
         title: true,
@@ -266,7 +270,8 @@ export async function GET(request: NextRequest) {
         verified: true,
         extractedLocation: true,
         googleMapsUrl: true,
-        createdAt: true
+        createdAt: true,
+        originalCreatedAt: true
       }
     });
 

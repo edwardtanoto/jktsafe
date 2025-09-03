@@ -53,7 +53,6 @@ export async function GET(request: NextRequest) {
           'x-internal-cron': 'true', // Mark this as an internal cron call
           'x-scrape-secret': scrapeSecret, // Provide authentication
           'user-agent': 'vercel-cron/1.0', // Identify as cron job
-          'x-vercel-protection-bypass': process.env.VERCEL_AUTOMATION_BYPASS_SECRET || '', // Bypass deployment protection
         },
         // Increase timeout for scraping operations and avoid caching
         cache: 'no-store',

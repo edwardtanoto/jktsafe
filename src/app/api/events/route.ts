@@ -50,16 +50,20 @@ export async function GET(request: NextRequest) {
 
     // Add time filtering if hours parameter is provided and > 0
     if (hours > 0) {
-      where.createdAt = {
-        gte: new Date(Date.now() - hours * 60 * 60 * 1000)
-      };
+      const cutoff = new Date(Date.now() - hours * 60 * 60 * 1000);
+      // Prefer originalCreatedAt when present; fall back to createdAt when originalCreatedAt is null
+      where.OR = [
+        { originalCreatedAt: { gte: cutoff } },
+        { AND: [ { originalCreatedAt: null }, { createdAt: { gte: cutoff } } ] }
+      ];
     }
 
     const events = await prisma.event.findMany({
       where,
-      orderBy: {
-        createdAt: 'desc'
-      },
+      orderBy: [
+        { originalCreatedAt: 'desc' },
+        { createdAt: 'desc' }
+      ],
       take: limit,
       select: {
         id: true,
